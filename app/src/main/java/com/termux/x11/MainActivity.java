@@ -75,7 +75,7 @@ import java.util.Map;
 @SuppressWarnings({"deprecation", "unused"})
 public class MainActivity extends AppCompatActivity {
     public static final String ACTION_STOP = "com.termux.x11.ACTION_STOP";
-    public static final String ACTION_CUSTOM = "com.termux.x11.ACTION_CUSTOM";
+    public static final String ACTION_CUSTOM = "com.termux.x11.ACTION_CUSTOM"; public static final String ACTION_RUN_TERMUX_COMMAND = "com.termux.x11.ACTION_RUN_TERMUX_COMMAND";
 
     public static Handler handler = new Handler();
     FrameLayout frm;
@@ -119,6 +119,8 @@ public class MainActivity extends AppCompatActivity {
             } else if (ACTION_CUSTOM.equals(intent.getAction())) {
                 android.util.Log.d("ACTION_CUSTOM", "action " + intent.getStringExtra("what"));
                 mInputHandler.extractUserActionFromPreferences(prefs, intent.getStringExtra("what")).accept(0, true);
+            } else if (ACTION_RUN_TERMUX_COMMAND.equals(intent.getAction())) {
+                runTermuxCommandFromTopApp(intent);
             }
         }
     };
@@ -147,7 +149,56 @@ public class MainActivity extends AppCompatActivity {
         return instance;
     }
 
-    @Override
+    
+private final java.util.ArrayList<Process> spawnedTermuxProcesses = new java.util.ArrayList<>();
+
+private void runTermuxCommandFromTopApp(Intent intent) {
+    final String cmd = intent.getStringExtra("cmd");
+    if (cmd == null || cmd.trim().isEmpty()) {
+        android.util.Log.e("TopAppRunner", "empty cmd");
+        return;
+    }
+
+    handler.post(() -> {
+        try {
+            final String prefix = "/data/data/com.termux/files/usr";
+            final String home = "/data/data/com.termux/files/home";
+            final String display = intent.getStringExtra("display") != null ? intent.getStringExtra("display") : ":1";
+
+            java.io.File logFile = new java.io.File(home, "termux-x11-topapp-run.log");
+
+            ProcessBuilder pb = new ProcessBuilder(prefix + "/bin/bash", "-lc", "exec " + cmd);
+            java.util.Map<String, String> env = pb.environment();
+
+            env.put("PREFIX", prefix);
+            env.put("HOME", home);
+            env.put("TMPDIR", prefix + "/tmp");
+            env.put("PATH", prefix + "/bin:" + prefix + "/bin/applets");
+            env.put("LD_LIBRARY_PATH", prefix + "/lib");
+            env.put("SHELL", prefix + "/bin/bash");
+            env.put("TERM", "xterm-256color");
+            env.put("LANG", "ko_KR.UTF-8");
+            env.put("DISPLAY", display);
+            env.put("XDG_RUNTIME_DIR", prefix + "/tmp");
+
+            String pulse = intent.getStringExtra("pulse");
+            if (pulse != null && !pulse.isEmpty()) env.put("PULSE_SERVER", pulse);
+
+            pb.directory(new java.io.File(home));
+            pb.redirectErrorStream(true);
+            pb.redirectOutput(ProcessBuilder.Redirect.appendTo(logFile));
+
+            Process proc = pb.start();
+            spawnedTermuxProcesses.add(proc);
+
+            android.util.Log.i("TopAppRunner", "spawned top-app command: " + cmd);
+        } catch (Exception e) {
+            android.util.Log.e("TopAppRunner", "failed to run top-app command: " + cmd, e);
+        }
+    });
+}
+
+@Override
     @SuppressLint({"AppCompatMethod", "ObsoleteSdkInt", "ClickableViewAccessibility", "WrongConstant", "UnspecifiedRegisterReceiverFlag"})
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -217,7 +268,7 @@ public class MainActivity extends AppCompatActivity {
         registerReceiver(receiver, new IntentFilter(ACTION_START) {{
             addAction(ACTION_PREFERENCES_CHANGED);
             addAction(ACTION_STOP);
-            addAction(ACTION_CUSTOM);
+            addAction(ACTION_CUSTOM); addAction(ACTION_RUN_TERMUX_COMMAND);
         }}, SDK_INT >= VERSION_CODES.TIRAMISU ? RECEIVER_EXPORTED : 0);
 
         inputMethodManager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
