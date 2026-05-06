@@ -110,9 +110,7 @@ public class MainActivity extends AppCompatActivity {
                 } catch (Exception e) {
                     Log.e("MainActivity", "Something went wrong while we extracted connection details from binder.", e);
                 }
-            } else if (ACTION_STOP.equals(intent.getAction())) {
-                finishAffinity();
-            } else if (ACTION_PREFERENCES_CHANGED.equals(intent.getAction())) {
+            } else if (ACTION_STOP.equals(intent.getAction())) { stopService(new Intent(MainActivity.this, TopAppKeepAliveService.class)); finishAffinity(); } else if (ACTION_PREFERENCES_CHANGED.equals(intent.getAction())) {
                 Log.d("MainActivity", "preference: " + intent.getStringExtra("key"));
                 if (!"additionalKbdVisible".equals(intent.getStringExtra("key")))
                     onPreferencesChanged("");
@@ -152,12 +150,29 @@ public class MainActivity extends AppCompatActivity {
     
 private final java.util.ArrayList<Process> spawnedTermuxProcesses = new java.util.ArrayList<>();
 
+
+private void ensureTopAppKeepAliveService() {
+    try {
+        Intent serviceIntent = new Intent(this, TopAppKeepAliveService.class);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent);
+        } else {
+            startService(serviceIntent);
+        }
+        android.util.Log.i("TopAppKeepAlive", "requested keep-alive service start");
+    } catch (Throwable e) {
+        android.util.Log.e("TopAppKeepAlive", "failed to start keep-alive service", e);
+    }
+}
+
 private void runTermuxCommandFromTopApp(Intent intent) {
     final String cmd = intent.getStringExtra("cmd");
     if (cmd == null || cmd.trim().isEmpty()) {
         android.util.Log.e("TopAppRunner", "empty cmd");
         return;
     }
+
+    ensureTopAppKeepAliveService();
 
     handler.post(() -> {
         try {
@@ -174,7 +189,7 @@ private void runTermuxCommandFromTopApp(Intent intent) {
             env.put("HOME", home);
             env.put("TMPDIR", prefix + "/tmp");
             env.put("PATH", prefix + "/bin:" + prefix + "/bin/applets");
-            env.put("LD_LIBRARY_PATH", prefix + "/lib");
+            env.remove("LD_LIBRARY_PATH");
             env.put("SHELL", prefix + "/bin/bash");
             env.put("TERM", "xterm-256color");
             env.put("LANG", "ko_KR.UTF-8");
