@@ -110,9 +110,7 @@ public class MainActivity extends AppCompatActivity {
                 } catch (Exception e) {
                     Log.e("MainActivity", "Something went wrong while we extracted connection details from binder.", e);
                 }
-            } else if (ACTION_STOP.equals(intent.getAction())) {
-                finishAffinity();
-            } else if (ACTION_PREFERENCES_CHANGED.equals(intent.getAction())) {
+            } else if (ACTION_STOP.equals(intent.getAction())) { requestRealFinish(); } else if (ACTION_PREFERENCES_CHANGED.equals(intent.getAction())) {
                 Log.d("MainActivity", "preference: " + intent.getStringExtra("key"));
                 if (!"additionalKbdVisible".equals(intent.getStringExtra("key")))
                     onPreferencesChanged("");
@@ -174,7 +172,7 @@ private void runTermuxCommandFromTopApp(Intent intent) {
             env.put("HOME", home);
             env.put("TMPDIR", prefix + "/tmp");
             env.put("PATH", prefix + "/bin:" + prefix + "/bin/applets");
-            env.put("LD_LIBRARY_PATH", prefix + "/lib");
+            env.remove("LD_LIBRARY_PATH");
             env.put("SHELL", prefix + "/bin/bash");
             env.put("TERM", "xterm-256color");
             env.put("LANG", "ko_KR.UTF-8");
@@ -196,6 +194,69 @@ private void runTermuxCommandFromTopApp(Intent intent) {
             android.util.Log.e("TopAppRunner", "failed to run top-app command: " + cmd, e);
         }
     });
+}
+
+
+private boolean forceRealFinish = false;
+
+private boolean hasAliveSpawnedTermuxProcess() {
+    if (spawnedTermuxProcesses == null) return false;
+
+    for (int i = spawnedTermuxProcesses.size() - 1; i >= 0; i--) {
+        Object obj = spawnedTermuxProcesses.get(i);
+        if (!(obj instanceof Process)) {
+            spawnedTermuxProcesses.remove(i);
+            continue;
+        }
+
+        Process proc = (Process) obj;
+        try {
+            if (proc.isAlive()) return true;
+            spawnedTermuxProcesses.remove(i);
+        } catch (Throwable ignored) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+private boolean shouldProtectCloseForRunningSession() {
+    if (forceRealFinish) return false;
+
+    try {
+        if (hasAliveSpawnedTermuxProcess()) return true;
+        if (LorieView.connected()) return true;
+    } catch (Throwable ignored) {
+        return hasAliveSpawnedTermuxProcess();
+    }
+
+    return false;
+}
+
+private boolean protectCloseIfNeeded(String reason) {
+    if (!shouldProtectCloseForRunningSession()) return false;
+
+    android.util.Log.i("CloseGuard", "Keeping Termux:X11 task alive instead of finishing: " + reason);
+    moveTaskToBack(true);
+    return true;
+}
+
+private void requestRealFinish() {
+    forceRealFinish = true;
+    finishAffinity();
+}
+
+@Override
+public void finish() {
+    if (protectCloseIfNeeded("finish")) return;
+    super.finish();
+}
+
+@Override
+public void finishAffinity() {
+    if (protectCloseIfNeeded("finishAffinity")) return;
+    super.finishAffinity();
 }
 
 @Override
@@ -220,7 +281,7 @@ private void runTermuxCommandFromTopApp(Intent intent) {
         frm = findViewById(R.id.frame);
         findViewById(R.id.preferences_button).setOnClickListener((l) -> startActivity(new Intent(this, LoriePreferences.class) {{ setAction(Intent.ACTION_MAIN); }}));
         findViewById(R.id.help_button).setOnClickListener((l) -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/termux/termux-x11/blob/master/README.md#running-graphical-applications"))));
-        findViewById(R.id.exit_button).setOnClickListener((l) -> finish());
+        findViewById(R.id.exit_button).setOnClickListener((l) -> requestRealFinish());
 
         LorieView lorieView = findViewById(R.id.lorieView);
         View lorieParent = (View) lorieView.getParent();
