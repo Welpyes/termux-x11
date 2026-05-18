@@ -37,6 +37,7 @@
 #include "exa.h"
 #include "drm_fourcc.h"
 
+#include "property.h"
 #include "lorie.h"
 
 #define DRM_FORMAT_MOD_LINEAR 0
@@ -672,9 +673,50 @@ static Bool lorieScreenInit(ScreenPtr pScreen, unused int argc, unused char **ar
 }                               /* end lorieScreenInit */
 
 
+
+static void lorieSetXftDpiResource(int dpi) {
+    if (dpi <= 0)
+        dpi = 96;
+
+    if (pScreenPtr == NULL || pScreenPtr->root == NULL)
+        return;
+
+    char resources[128];
+    int len = snprintf(resources, sizeof(resources), "Xft.dpi:\t%d\n", dpi);
+
+    if (len <= 0)
+        return;
+
+    if (len >= (int)sizeof(resources))
+        len = (int)sizeof(resources) - 1;
+
+    Atom resourceManager = MakeAtom("RESOURCE_MANAGER", strlen("RESOURCE_MANAGER"), TRUE);
+    Atom stringAtom = MakeAtom("STRING", strlen("STRING"), TRUE);
+
+    ChangeWindowProperty(
+        pScreenPtr->root,
+        resourceManager,
+        stringAtom,
+        8,
+        PropModeReplace,
+        len,
+        resources,
+        TRUE
+    );
+}
+
 void lorieSetMonitorResolution(int dpi) {
     if (dpi <= 0)
         dpi = 96;
+
+    /*
+     * Keep the actual output resolution unchanged.
+     *
+     * monitorResolution/mmWidth/mmHeight updates the X server/RandR DPI.
+     * RESOURCE_MANAGER Xft.dpi is also updated because desktop environments
+     * and toolkits such as XFCE/GTK/Qt commonly use Xft.dpi for UI scaling.
+     */
+    lorieSetXftDpiResource(dpi);
 
     if (monitorResolution == dpi)
         return;
