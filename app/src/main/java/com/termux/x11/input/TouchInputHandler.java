@@ -429,7 +429,7 @@ public class TouchInputHandler {
         mInjector.scaleTouchpad = p.scaleTouchpad.get() &&
                 "1".equals(p.touchMode.get()) &&
                 !"native".equals(p.displayResolutionMode.get());
-        mInjector.capturedPointerSpeedFactor = ((float) p.capturedPointerSpeedFactor.get())/100;
+        mInjector.capturedPointerSpeedFactor = ((float) p.capturedPointerSpeedFactor.get())/100; mInjector.capturedMouseSpeedFactor = ((float) p.capturedMouseSpeedFactor.get()) / 100f; mInjector.capturedMouseAcceleration = ((float) p.capturedMouseAcceleration.get()) / 100f; mInjector.capturedMouseDexLikeAcceleration = p.capturedMouseDexLikeAcceleration.get();
         mInjector.dexMetaKeyCapture = p.dexMetaKeyCapture.get();
         mInjector.stylusIsMouse = p.stylusIsMouse.get();
         mInjector.stylusButtonContactModifierMode = p.stylusButtonContactModifierMode.get();
@@ -833,7 +833,7 @@ public class TouchInputHandler {
 
     private class HardwareMouseListener {
         private int savedBS = 0;
-        private int currentBS = 0;
+        private int currentBS = 0; private long lastCapturedMouseEventTimeMs = 0; private final float[] adjustedMouseDelta = new float[2];
 
         boolean isMouseButtonChanged(int mask) {
             return (savedBS & mask) != (currentBS & mask);
@@ -883,10 +883,7 @@ public class TouchInputHandler {
                             break;
                     }
 
-                    x *= mInjector.capturedPointerSpeedFactor * mMetrics.density;
-                    y *= mInjector.capturedPointerSpeedFactor * mMetrics.density;
-
-                    mInjector.sendCursorMove(x, y, true);
+                    float[] adjusted = adjustCapturedMouseDelta(e, x, y); mInjector.sendCursorMove(adjusted[0], adjusted[1], true);
                     if (axis_relative_x && mTouchpadHandler != null)
                         mTouchpadHandler.mTapDetector.onTouchEvent(e);
                 }
@@ -896,12 +893,7 @@ public class TouchInputHandler {
             for (int[] button: buttons)
                 if (isMouseButtonChanged(button[0]))
                     mInjector.sendMouseEvent(null, button[1], mouseButtonDown(button[0]), true);
-            savedBS = currentBS;
-            return true;
-        }
-    }
-
-    private class StylusListener {
+            savedBS = currentBS; return true; } private float[] adjustCapturedMouseDelta(MotionEvent e, float dx, float dy) { float base = mInjector.capturedPointerSpeedFactor * mInjector.capturedMouseSpeedFactor * mMetrics.density; if (!mInjector.capturedMouseDexLikeAcceleration || mInjector.capturedMouseAcceleration <= 0f) { adjustedMouseDelta[0] = dx * base; adjustedMouseDelta[1] = dy * base; return adjustedMouseDelta; } long eventTimeMs = e.getEventTime(); float dtMs = lastCapturedMouseEventTimeMs == 0 ? 16f : MathUtils.clamp((float) (eventTimeMs - lastCapturedMouseEventTimeMs), 1f, 64f); lastCapturedMouseEventTimeMs = eventTimeMs; float distance = (float) Math.hypot(dx, dy); float velocity = distance / dtMs; float gain = 1.0f + mInjector.capturedMouseAcceleration * Math.min(2.5f, velocity * 0.35f); gain = MathUtils.clamp(gain, 0.75f, 3.5f); adjustedMouseDelta[0] = dx * base * gain; adjustedMouseDelta[1] = dy * base * gain; return adjustedMouseDelta; } } private class StylusListener {
         private float x = 0, y = 0, pressure = 0, tilt = 0, orientation = 0;
         private int buttons = 0;
 
