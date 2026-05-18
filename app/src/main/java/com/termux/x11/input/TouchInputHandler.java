@@ -789,7 +789,7 @@ public class TouchInputHandler {
             return false;
         }
 
-        if (isMediaSessionKey(k)) {
+        // Ctrl+Alt+Esc releases Android pointer capture. Bare Esc is sent to X11, then pointer capture is requested again to avoid accidental DeX title bar exposure. if (mInjector.pointerCapture && k == KeyEvent.KEYCODE_ESCAPE) { boolean ctrlAltEsc = e.isCtrlPressed() && e.isAltPressed(); if (ctrlAltEsc) { if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) setCapturingEnabled(false); return true; } if (mActivity.getLorieView().hasPointerCapture()) { boolean sent = mInjector.sendKeyEvent(e); if (e.getAction() == KeyEvent.ACTION_UP) mActivity.getLorieView().post(() -> setCapturingEnabled(true)); return sent; } } if (isMediaSessionKey(k)) {
             if (mediaKeysAction == noAction)
                 return false;
 

@@ -63,7 +63,7 @@ E.g. <b>META</b> for <i>META key</i>, \n
     <string name="lorie_pref_showMouseHelper">Show mouse click helper overlay</string>
     <string name="lorie_pref_showMouseHelper_summary">Onscreen mouse buttons usable with touchpad</string>
     <string name="lorie_pref_pointerCapture">Capture external pointer devices when possible</string>
-    <string name="lorie_pref_pointerCapture_summary">Intercept all hardware pointer events. Pointer is back to Android after pressing Escape key.</string>
+    <string name="lorie_pref_pointerCapture_summary">Intercept all hardware pointer events. Pointer is back to Android after pressing Ctrl+Alt+Esc.</string>
     <string name="lorie_pref_transformCapturedPointer">Transform captured pointer movements</string>
     <string name="lorie_pref_capturedPointerSpeedFactor">Captured pointer speed factor, %</string>
   <string name="lorie_pref_capturedMouseDexLikeAcceleration">Use DeX-like acceleration for captured mouse</string>
@@ -88,7 +88,7 @@ E.g. <b>META</b> for <i>META key</i>, \n
     <string name="lorie_pref_enableAccessibilityService_summary">Open Accessibility settings.</string>
     <string name="lorie_pref_enableAccessibilityServiceAutomatically">Enable Accessibility service for intercepting system shortcuts automatically.</string>
     <string name="lorie_pref_enableAccessibilityServiceAutomatically_summary">Requires WRITE_SECURE_SETTINGS permission.</string>
-    <string name="lorie_pref_pauseKeyInterceptingWithEsc">Pause key intercepting with Esc key</string>
+    <string name="lorie_pref_pauseKeyInterceptingWithEsc">Pause key intercepting with Ctrl+Alt+Esc</string>
     <string name="lorie_pref_filterOutWinkey">Filter out intercepted Win (Meta/Mod4) key.</string>
     <string name="lorie_pref_filterOutWinkey_summary">Allows you to use Dex shortcuts while intercepting. Requires Accessibility service to work.</string>
     <string name="lorie_pref_enforceCharBasedInput">Enforce char based input</string>

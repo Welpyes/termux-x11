@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="not_connected">연결되지 않음</string>
+    <string name="preferences_button_text">   설정   </string>
+    <string name="help_button_text">   도움말   </string>
+    <string name="exit_button_text">   종료   </string>
+
+    <string name="lorie_notification_content_text">아래로 내려 옵션 표시</string>
+    <string name="lorie_notification_open_preferences">설정</string>
+    <string name="lorie_notification_exit">종료</string>
+    <string name="lorie_notification_restart_activity">재시작</string>
+    <string name="lorie_notification_toggle_soft_keyboard">IME 전환</string>
+    <string name="lorie_notification_toggle_additional_key_bar">추가 키보드 전환</string>
+    <string name="lorie_notification_release_pointer_and_keyboard_capture">캡처 해제</string>
+    <string name="lorie_notification_toggle_fullscreen">전체화면 전환</string>
+
+    <string name="lorie_pref_main">설정</string>
+    <string name="lorie_pref_output">출력</string>
+    <string name="lorie_pref_pointer">포인터</string>
+    <string name="lorie_pref_kbd">키보드</string>
+    <string name="lorie_pref_other">기타</string>
+    <string name="lorie_pref_version">버전</string>
+    <string name="lorie_pref_ekbar">추가 키 바 설정</string>
+    <string name="lorie_pref_userActions">사용자 동작 응답</string>
+
+    <string name="lorie_pref_displayResolutionMode">디스플레이 해상도 모드</string>
+    <string name="lorie_pref_displayScale">디스플레이 배율, %</string>
+    <string name="lorie_pref_displayResolutionExact">디스플레이 해상도</string>
+    <string name="lorie_pref_displayResolutionCustom">디스플레이 해상도</string>
+    <string name="lorie_pref_displayFilteringMode">디스플레이 필터링 모드</string>
+    <string name="lorie_pref_adjustResolution">화면 방향에 맞춰 설정 해상도 조정</string>
+    <string name="lorie_pref_displayStretch">디스플레이에 맞게 늘리기</string>
+    <string name="lorie_pref_Reseed">소프트 키보드가 열려 있을 때 화면 재조정</string>
+    <string name="lorie_pref_Reseed_summary">소프트 키보드가 열려 있는 동안 화면 크기를 조정합니다.</string>
+    <string name="lorie_pref_PIP">PIP 모드</string>
+    <string name="lorie_pref_PIP_summary">홈 버튼 또는 최근 앱 버튼을 눌렀을 때 앱을 PIP 모드로 표시합니다.</string>
+    <string name="lorie_pref_fullscreen">전체화면</string>
+    <string name="lorie_pref_fullscreen_summary">기기 화면에서 몰입형 모드를 전환합니다.</string>
+    <string name="lorie_pref_forceOrientation">화면 방향</string>
+    <string name="lorie_pref_hideCutout">디스플레이 컷아웃 숨기기</string>
+    <string name="lorie_pref_keepScreenOn">화면 켜짐 유지</string>
+
+    <string name="lorie_pref_touchMode">터치스크린 입력 모드</string>
+    <string name="lorie_pref_scaleTouchpad">터치패드에 디스플레이 배율 적용</string>
+    <string name="lorie_pref_showStylusClickOverride">스타일러스 클릭 옵션 표시</string>
+    <string name="lorie_pref_showStylusClickOverride_summary">스타일러스 터치를 왼쪽/가운데/오른쪽 클릭으로 오버라이드합니다.</string>
+    <string name="lorie_pref_stylusIsMouse">스타일러스 마우스 모드 활성화</string>
+    <string name="lorie_pref_stylusIsMouse_summary">스타일러스를 마우스처럼 동작하게 합니다. 활성화 시 압력, 각도, 기울기는 무시하고 커서 이동과 마우스 클릭만 보냅니다.</string>
+    <string name="lorie_pref_stylusButtonContactModifierMode">스타일러스 버튼 접촉 보정 모드</string>
+    <string name="lorie_pref_stylusButtonContactModifierMode_summary">스타일러스 버튼을 누른 상태로 화면에 닿았을 때만 오른쪽/가운데 버튼을 보냅니다.</string>
+    <string name="lorie_pref_showMouseHelper">마우스 클릭 보조 오버레이 표시</string>
+    <string name="lorie_pref_showMouseHelper_summary">터치패드에서 사용할 수 있는 화면 마우스 버튼입니다.</string>
+    <string name="lorie_pref_pointerCapture">가능한 경우 외부 포인터 장치 캡처</string>
+    <string name="lorie_pref_pointerCapture_summary">모든 하드웨어 포인터 이벤트를 가로챕니다. Ctrl+Alt+Esc를 누르면 포인터가 Android로 돌아갑니다.</string>
+    <string name="lorie_pref_transformCapturedPointer">캡처된 포인터 이동 변환</string>
+    <string name="lorie_pref_capturedPointerSpeedFactor">캡처된 포인터 속도 배율, %</string>
+    <string name="lorie_pref_capturedMouseDexLikeAcceleration">캡처된 마우스에 DeX 유사 가속 적용</string>
+    <string name="lorie_pref_capturedMouseDexLikeAcceleration_summary">포인터 캡처가 활성화된 동안 하드웨어 마우스 이동에 속도 기반 가속 곡선을 적용합니다.</string>
+    <string name="lorie_pref_capturedMouseSpeedFactor">캡처된 마우스 속도 배율, %</string>
+    <string name="lorie_pref_capturedMouseSpeedFactor_summary">포인터 캡처가 활성화된 동안 하드웨어 마우스에만 적용되는 속도 배율입니다.</string>
+    <string name="lorie_pref_capturedMouseAcceleration">캡처된 마우스 가속, %</string>
+    <string name="lorie_pref_capturedMouseAcceleration_summary">캡처된 하드웨어 마우스 이동에 추가 속도 기반 gain을 적용합니다.</string>
+    <string name="lorie_pref_tapToMove">터치패드 탭 이동 활성화</string>
+
+    <string name="lorie_pref_showAdditionalKbd">추가 키보드 표시</string>
+    <string name="lorie_pref_showAdditionalKbd_summary">추가 키가 포함된 키보드를 표시합니다.</string>
+    <string name="lorie_pref_showIMEWhileExternalConnected">외부 키보드 연결 시 IME 표시</string>
+    <string name="lorie_pref_showIMEWhileExternalConnected_summary">하드웨어 키보드가 연결되어 있을 때 소프트웨어 키보드를 표시합니다.</string>
+    <string name="lorie_pref_preferScancodes">가능한 경우 스캔코드 우선 사용</string>
+    <string name="lorie_pref_preferScancodes_summary">X 서버가 DE 설정 또는 setxkbmap으로 하드웨어 키보드 레이아웃을 처리하게 합니다.</string>
+    <string name="lorie_pref_hardwareKbdScancodesWorkaround">하드웨어 키보드 스캔코드 우회</string>
+    <string name="lorie_pref_hardwareKbdScancodesWorkaround_summary">일부 기기의 스캔코드를 수정합니다. 여러 레이아웃 사용 시 문제가 생길 수 있습니다.</string>
+    <string name="lorie_pref_dexMetaKeyCapture">시스템 단축키 가로채기</string>
+    <string name="lorie_pref_dexMetaKeyCapture_summary">Samsung DeX 전용입니다. &quot;Alt+F4&quot;, &quot;Meta+D&quot;, &quot;Meta+E&quot; 등을 가로챌 수 있습니다.</string>
+    <string name="lorie_pref_enableAccessibilityService">시스템 단축키 수동 가로채기용 접근성 서비스 활성화</string>
+    <string name="lorie_pref_enableAccessibilityService_summary">접근성 설정을 엽니다.</string>
+    <string name="lorie_pref_enableAccessibilityServiceAutomatically">시스템 단축키 자동 가로채기용 접근성 서비스 활성화</string>
+    <string name="lorie_pref_enableAccessibilityServiceAutomatically_summary">WRITE_SECURE_SETTINGS 권한이 필요합니다.</string>
+    <string name="lorie_pref_pauseKeyInterceptingWithEsc">Ctrl+Alt+Esc로 키 가로채기 일시 중지</string>
+    <string name="lorie_pref_filterOutWinkey">가로챈 Win(Meta/Mod4) 키 필터링</string>
+    <string name="lorie_pref_filterOutWinkey_summary">가로채기 중에도 DeX 단축키를 사용할 수 있습니다. 접근성 서비스가 필요합니다.</string>
+    <string name="lorie_pref_enforceCharBasedInput">문자 기반 입력 강제</string>
+    <string name="lorie_pref_enforceCharBasedInput_summary">추천어, 예측 입력, CJK 언어 처리를 억제합니다.</string>
+
+    <string name="lorie_pref_clipboardEnable">클립보드 공유</string>
+    <string name="lorie_pref_requestNotificationPermission">알림 권한 요청</string>
+    <string name="lorie_pref_xrMode">Meta Oculus XR 모드</string>
+    <string name="lorie_pref_configureResponseToUserActions">사용자 동작 응답 설정</string>
+    <string name="lorie_pref_storeSecondaryDisplayPreferencesSeparately">보조 디스플레이별 설정 저장</string>
+    <string name="lorie_pref_storeSecondaryDisplayPreferencesSeparately_summary">설정하려는 디스플레이에서 이 화면을 여세요.</string>
+
+    <string name="lorie_pref_adjustHeightForEK">추가 키 바 높이만큼 화면 높이 조정</string>
+    <string name="lorie_pref_adjustHeightForEK_summary">추가 키 바 전환 시 화면 깜빡임이 발생할 수 있습니다.</string>
+    <string name="lorie_pref_useTermuxEKBarBehaviour">추가 키 바의 특수 키를 누를 때마다 비활성화</string>
+    <string name="lorie_pref_useTermuxEKBarBehaviour_summary">길게 눌러 특수 키를 잠글 수 있습니다.</string>
+    <string name="lorie_pref_opacityEKBar">추가 키 바 불투명도, %</string>
+    <string name="lorie_pref_extra_keys_config">추가 키 설정</string>
+
+    <string name="lorie_pref_swipeUpAction">세 손가락 위로 스와이프</string>
+    <string name="lorie_pref_swipeDownAction">세 손가락 아래로 스와이프</string>
+    <string name="lorie_pref_volumeUpAction">볼륨 올림</string>
+    <string name="lorie_pref_volumeDownAction">볼륨 내림</string>
+    <string name="lorie_pref_backButtonAction">뒤로 버튼</string>
+    <string name="lorie_pref_notificationTapAction">알림 탭</string>
+    <string name="lorie_pref_notificationButton0Action">알림 첫 번째 버튼</string>
+    <string name="lorie_pref_notificationButton1Action">알림 두 번째 버튼</string>
+    <string name="lorie_pref_mediaKeysAction">미디어 키</string>
+    <string name="lorie_pref_summary_requiresExactOrCustom">"디스플레이 해상도 모드"가 "exact" 또는 "custom"이어야 합니다.</string>
+    <string name="lorie_pref_summary_requiresIntercepting">DeX 모드 또는 접근성 서비스로 시스템 단축키 가로채기가 필요합니다.</string>
+    <string name="lorie_pref_summary_requiresTrackpadAndNative">"터치스크린 입력 모드"가 "Trackpad"이고 "디스플레이 해상도 모드"가 "native"가 아니어야 합니다.</string>
+</resources>

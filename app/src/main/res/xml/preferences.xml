@@ -36,8 +36,8 @@
         <SeekBarPreference app:key="capturedPointerSpeedFactor" app:defaultValue="100" app:min="1" android:max="300" app:seekBarIncrement="1" app:showSeekBarValue="true" app:updatesContinuously="true" />
 
   <SwitchPreferenceCompat app:key="capturedMouseDexLikeAcceleration" app:defaultValue="true" />
-  <SeekBarPreference app:key="capturedMouseSpeedFactor" app:defaultValue="150" app:min="25" android:max="800" app:seekBarIncrement="5" app:showSeekBarValue="true" app:updatesContinuously="true" />
-  <SeekBarPreference app:key="capturedMouseAcceleration" app:defaultValue="100" app:min="0" android:max="300" app:seekBarIncrement="5" app:showSeekBarValue="true" app:updatesContinuously="true" />
+  <SeekBarPreference app:key="capturedMouseSpeedFactor" app:defaultValue="190" app:min="25" android:max="800" app:seekBarIncrement="5" app:showSeekBarValue="true" app:updatesContinuously="true" />
+  <SeekBarPreference app:key="capturedMouseAcceleration" app:defaultValue="110" app:min="0" android:max="300" app:seekBarIncrement="5" app:showSeekBarValue="true" app:updatesContinuously="true" />
         <SwitchPreferenceCompat app:key="tapToMove" app:defaultValue="false" />
     </PreferenceScreen>
     <PreferenceScreen app:key="kbd">
