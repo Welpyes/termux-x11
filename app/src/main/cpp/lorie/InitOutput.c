@@ -712,32 +712,16 @@ void lorieSetMonitorResolution(int dpi) {
         dpi = 96;
 
     /*
-     * Keep the actual output resolution unchanged.
+     * Do not change RandR/mm size here.
      *
-     * monitorResolution/mmWidth/mmHeight updates the X server/RandR DPI.
-     * RESOURCE_MANAGER Xft.dpi is also updated because desktop environments
-     * and toolkits such as XFCE/GTK/Qt commonly use Xft.dpi for UI scaling.
+     * Changing the X server physical DPI changes xdpyinfo DPI and can affect
+     * cursor size, hotspot behavior, and input hit testing.  For desktop UI
+     * scaling we only publish Xft.dpi as a toolkit/session hint.
+     *
+     * Desktop environments such as XFCE should consume this through a session
+     * helper and apply their own icon/panel/xsettings scaling.
      */
     lorieSetXftDpiResource(dpi);
-
-    if (monitorResolution == dpi)
-        return;
-
-    monitorResolution = dpi;
-
-    if (pScreenPtr == NULL)
-        return;
-
-    CARD32 mmWidth = (CARD32)(((double)pScreenPtr->width) * 25.4 / monitorResolution + 0.5);
-    CARD32 mmHeight = (CARD32)(((double)pScreenPtr->height) * 25.4 / monitorResolution + 0.5);
-
-    pScreenPtr->mmWidth = mmWidth;
-    pScreenPtr->mmHeight = mmHeight;
-
-    if (pScreenPtr->root != NULL) {
-        RRScreenSizeSet(pScreenPtr, pScreenPtr->width, pScreenPtr->height, mmWidth, mmHeight);
-        RRScreenSizeNotify(pScreenPtr);
-    }
 }
 
 void lorieConfigureNotify(int width, int height, int framerate, size_t name_size, char* name) {

@@ -122,13 +122,13 @@ E.g. <b>META</b> for <i>META key</i>, \n
     <string name="lorie_pref_summary_requiresIntercepting">Requires intercepting system shortcuts with Dex mode or with Accessibility service</string>
     <string name="lorie_pref_summary_requiresTrackpadAndNative">Requires "Touchscreen input mode" to be "Trackpad" and "Display resolution mode" to be not "native"</string>
 
-    <string name="lorie_pref_displayDpiScale">Display scale / X11 DPI</string>
-    <string name="lorie_pref_displayDpiScale_summary">Reports a higher X11 DPI to make desktop UI larger. Some applications may require restarting the X session.</string>
-    <string name="lorie_pref_desktopModeOutputEnabled">Use separate output settings in Desktop Mode</string>
-    <string name="lorie_pref_desktopModeOutputEnabled_summary">Use a separate resolution and scale when Desktop Mode or DeX is active.</string>
+    <string name="lorie_pref_displayDpiScale">Xft DPI scale</string>
+    <string name="lorie_pref_displayDpiScale_summary">Sets the Xft.dpi scaling hint. Desktop environments such as XFCE may require a session helper to scale icons and panels.</string>
+    <string name="lorie_pref_desktopModeOutputEnabled">Use separate output profile in Desktop Mode</string>
+    <string name="lorie_pref_desktopModeOutputEnabled_summary">Use a separate resolution and Xft DPI scale when Desktop Mode or DeX is active.</string>
     <string name="lorie_pref_desktopModeResolution">Desktop Mode resolution</string>
     <string name="lorie_pref_desktopModeResolution_summary_unavailable">No supported external display resolution detected</string>
-    <string name="lorie_pref_desktopModeDpiScale">Desktop Mode scale / X11 DPI</string>
-    <string name="lorie_pref_desktopModeDpiScale_summary">Scale used only when Desktop Mode or DeX is active. Some applications may require restarting the X session.</string>
+    <string name="lorie_pref_desktopModeDpiScale">Desktop Mode Xft DPI scale</string>
+    <string name="lorie_pref_desktopModeDpiScale_summary">Sets the Xft.dpi scaling hint used only when Desktop Mode or DeX is active.</string>
 
 </resources>
