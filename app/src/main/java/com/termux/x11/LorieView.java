@@ -699,34 +699,7 @@ public class LorieView extends SurfaceView implements InputStub {
         int left = availableLeft + (availableW - drawW) / 2;
         int top = availableTop + (availableH - drawH) / 2;
 
-        viewport.set(left, top, left + drawW, top + drawH);
-        android.content.SharedPreferences outputPrefs =
-                android.preference.PreferenceManager.getDefaultSharedPreferences(getContext());
-
-        /*
-         * Xft DPI must follow the exact output profile already selected by
-         * getDimensionsFromSettings().
-         *
-         * Do not re-run Desktop Mode detection here.  Resolution selection has
-         * already decided whether the normal profile or Desktop Mode profile is
-         * active.
-         */
-        String outputDpiScale = this.desktopModeOutputProfileActive
-                ? outputPrefs.getString("desktopModeDpiScale", "100")
-                : outputPrefs.getString("displayDpiScale", "100");
-
-        Log.d("LorieView", "Xft DPI profile="
-                + (this.desktopModeOutputProfileActive ? "desktop" : "normal")
-                + " scale=" + outputDpiScale);
-
-        setDpi(com.termux.x11.utils.DesktopModeOutputHelper.resolveX11Dpi(
-                getContext(),
-                false,
-                outputDpiScale,
-                outputDpiScale
-        ));
-
-setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.x, p.y);
+        viewport.set(left, top, left + drawW, top + drawH); android.content.SharedPreferences outputPrefs = android.preference.PreferenceManager.getDefaultSharedPreferences(getContext()); String outputDpiScale = this.desktopModeOutputProfileActive ? outputPrefs.getString("desktopModeDpiScale", "100") : outputPrefs.getString("displayDpiScale", "100"); Log.d("LorieView", "Xft DPI profile=" + (this.desktopModeOutputProfileActive ? "desktop" : "normal") + " scale=" + outputDpiScale); setDpi(com.termux.x11.utils.DesktopModeOutputHelper.resolveX11Dpi( getContext(), false, outputDpiScale, outputDpiScale )); setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.x, p.y);
 
         if (mCallback != null)
             mCallback.changed(availableW, availableH, p.x, p.y);
