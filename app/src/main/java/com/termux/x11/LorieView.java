@@ -704,25 +704,19 @@ public class LorieView extends SurfaceView implements InputStub {
                 android.preference.PreferenceManager.getDefaultSharedPreferences(getContext());
 
         /*
-         * Use the same condition as Desktop Mode resolution override.
+         * Xft DPI must follow the exact output profile already selected by
+         * getDimensionsFromSettings().
          *
-         * If Desktop Mode resolution would be applied, Desktop Mode Xft DPI
-         * must also be applied.  Otherwise use the normal on-device Xft DPI.
+         * Do not re-run Desktop Mode detection here.  Resolution selection has
+         * already decided whether the normal profile or Desktop Mode profile is
+         * active.
          */
-        boolean desktopModeOutputProfileActive =
-                com.termux.x11.utils.DesktopModeOutputHelper.resolveDesktopModeResolutionString(
-                        getContext(),
-                        outputPrefs.getBoolean("desktopModeOutputEnabled", false),
-                        outputPrefs.getString("desktopModeResolution", "1920x1080"),
-                        null
-                ) != null;
-
-        String outputDpiScale = desktopModeOutputProfileActive
+        String outputDpiScale = this.desktopModeOutputProfileActive
                 ? outputPrefs.getString("desktopModeDpiScale", "100")
                 : outputPrefs.getString("displayDpiScale", "100");
 
         Log.d("LorieView", "Xft DPI profile="
-                + (desktopModeOutputProfileActive ? "desktop" : "normal")
+                + (this.desktopModeOutputProfileActive ? "desktop" : "normal")
                 + " scale=" + outputDpiScale);
 
         setDpi(com.termux.x11.utils.DesktopModeOutputHelper.resolveX11Dpi(
@@ -732,7 +726,7 @@ public class LorieView extends SurfaceView implements InputStub {
                 outputDpiScale
         ));
 
-        setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.x, p.y);
+setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.x, p.y);
 
         if (mCallback != null)
             mCallback.changed(availableW, availableH, p.x, p.y);
