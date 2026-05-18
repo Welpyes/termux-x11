@@ -220,7 +220,7 @@ public class LoriePreferences extends AppCompatActivity implements PreferenceFra
         public void onResume() {
             super.onResume();
             //noinspection DataFlowIssue
-            ((LoriePreferences) getActivity()).getSupportActionBar().setTitle(getPreferenceScreen().getTitle()); /* desktop-output-dpi-refresh-v2 */ updateDesktopModeResolutionList();
+            ((LoriePreferences) getActivity()).getSupportActionBar().setTitle(getPreferenceScreen().getTitle()); /* desktop-output-dpi-refresh-v2 */ updateDesktopModeResolutionList(); installDesktopModeOutputPreferenceListeners();
         }
 
         /** @noinspection SameParameterValue*/
@@ -297,7 +297,44 @@ public class LoriePreferences extends AppCompatActivity implements PreferenceFra
             setNoActionOptionText(findPreference("mediaKeysAction"), "android media control");
         }
 
-        private void updateDesktopModeResolutionList() {
+        private void installDesktopModeOutputPreferenceListeners() {
+        final String[] keys = new String[] {
+            "displayDpiScale",
+            "desktopModeOutputEnabled",
+            "desktopModeResolution",
+            "desktopModeDpiScale"
+        };
+
+        for (String key : keys) {
+            Preference pref = findPreference(key);
+            if (pref == null) continue;
+
+            pref.setOnPreferenceChangeListener((preference, newValue) -> {
+                /*
+                 * These preferences are read directly from SharedPreferences,
+                 * not from the original Prefs wrapper.  Send the same preference
+                 * changed broadcast manually so MainActivity refreshes LorieView,
+                 * which then re-sends the effective Xft.dpi to the X server.
+                 *
+                 * Post it slightly later so AndroidX Preference has already
+                 * committed the new value.
+                 */
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    try {
+                        requireContext().sendBroadcast(
+                            new Intent(ACTION_PREFERENCES_CHANGED)
+                                .putExtra("key", preference.getKey())
+                        );
+                    } catch (Throwable ignored) {
+                    }
+
+                    updatePreferencesLayout();
+                }, 50);
+
+                return true;
+            });
+        }
+    } private void updateDesktopModeResolutionList() {
         Preference preference = findPreference("desktopModeResolution");
         if (!(preference instanceof androidx.preference.ListPreference)) return;
 
