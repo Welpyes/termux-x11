@@ -81,9 +81,7 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
-                if (lorieView != null) {
-                    lorieView.triggerCallback();
-                }
+                onPreferencesChanged(key);
             };
 
     private static boolean isOutputProfilePreferenceKey(String key) {
