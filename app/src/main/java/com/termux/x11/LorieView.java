@@ -344,7 +344,7 @@ public class LorieView extends SurfaceView implements InputStub {
     private static boolean clipboardSyncEnabled = false;
     private static boolean hardwareKbdScancodesWorkaround = false;
     private final InputMethodManager mIMM = (InputMethodManager)getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-    private Callback mCallback;
+    private Callback mCallback; private boolean desktopModeOutputProfileActive = false;
     private final Point p = new Point();
     private final Rect contentInsets = new Rect();
     private final Rect viewport = new Rect();
@@ -649,7 +649,7 @@ public class LorieView extends SurfaceView implements InputStub {
                 w + "x" + h
             );
 
-        if (desktopModeResolution != null) {
+        desktopModeOutputProfileActive = desktopModeResolution != null; if (desktopModeResolution != null) {
             int[] desktopModeSize =
                 com.termux.x11.utils.DesktopModeOutputHelper.parseResolution(desktopModeResolution);
 
@@ -700,17 +700,7 @@ public class LorieView extends SurfaceView implements InputStub {
         int top = availableTop + (availableH - drawH) / 2;
 
         viewport.set(left, top, left + drawW, top + drawH);
-        android.content.SharedPreferences outputPrefs =
-            android.preference.PreferenceManager.getDefaultSharedPreferences(getContext());
-
-        setDpi(com.termux.x11.utils.DesktopModeOutputHelper.resolveX11Dpi(
-            getContext(),
-            outputPrefs.getBoolean("desktopModeOutputEnabled", false),
-            outputPrefs.getString("displayDpiScale", "100"),
-            outputPrefs.getString("desktopModeDpiScale", "100")
-        ));
-
-        setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.x, p.y);
+        android.content.SharedPreferences outputPrefs = android.preference.PreferenceManager.getDefaultSharedPreferences(getContext()); String outputDpiScale = desktopModeOutputProfileActive ? outputPrefs.getString("desktopModeDpiScale", "100") : outputPrefs.getString("displayDpiScale", "100"); setDpi(com.termux.x11.utils.DesktopModeOutputHelper.resolveX11Dpi( getContext(), false, outputDpiScale, outputDpiScale )); setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.x, p.y);
 
         if (mCallback != null)
             mCallback.changed(availableW, availableH, p.x, p.y);
