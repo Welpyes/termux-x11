@@ -774,7 +774,10 @@ public class LorieView extends SurfaceView implements InputStub {
     ClipboardManager.OnPrimaryClipChangedListener clipboardListener = this::handleClipboardChange;
 
     public void reloadPreferences(Prefs p) {
-        String filtering = p.displayFilteringMode.get();
+        String filtering =
+                android.preference.PreferenceManager
+                    .getDefaultSharedPreferences(getContext())
+                    .getString("displayFilteringMode", "nearest");
         setFiltering("nearest".equals(filtering) ? GLES20.GL_NEAREST : GLES20.GL_LINEAR);
         hardwareKbdScancodesWorkaround = p.hardwareKbdScancodesWorkaround.get();
         clipboardSyncEnabled = p.clipboardEnable.get();
