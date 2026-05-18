@@ -74,7 +74,26 @@ import java.util.Map;
 @SuppressLint("ApplySharedPref")
 @SuppressWarnings({"deprecation", "unused"})
 public class MainActivity extends AppCompatActivity {
-    public static final String ACTION_STOP = "com.termux.x11.ACTION_STOP";
+    
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener outputProfilePreferenceListener =
+            (sharedPreferences, key) -> {
+                if (!isOutputProfilePreferenceKey(key)) {
+                    return;
+                }
+
+                if (lorieView != null) {
+                    lorieView.triggerCallback();
+                }
+            };
+
+    private static boolean isOutputProfilePreferenceKey(String key) {
+        return "displayDpiScale".equals(key)
+                || "desktopModeDpiScale".equals(key)
+                || "desktopModeOutputEnabled".equals(key)
+                || "desktopModeResolution".equals(key);
+    }
+
+public static final String ACTION_STOP = "com.termux.x11.ACTION_STOP";
     public static final String ACTION_CUSTOM = "com.termux.x11.ACTION_CUSTOM"; public static final String ACTION_RUN_TERMUX_COMMAND = "com.termux.x11.ACTION_RUN_TERMUX_COMMAND";
 
     public static Handler handler = new Handler();
@@ -218,6 +237,11 @@ private void runTermuxCommandFromTopApp(Intent intent) {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        android.preference.PreferenceManager
+                .getDefaultSharedPreferences(this)
+                .registerOnSharedPreferenceChangeListener(outputProfilePreferenceListener);
+
+
         prefs = new Prefs(this);
         int modeValue = Integer.parseInt(prefs.touchMode.get()) - 1;
         if (modeValue > 2)
@@ -318,6 +342,11 @@ private void runTermuxCommandFromTopApp(Intent intent) {
 
     @Override
     protected void onDestroy() {
+        android.preference.PreferenceManager
+                .getDefaultSharedPreferences(this)
+                .unregisterOnSharedPreferenceChangeListener(outputProfilePreferenceListener);
+
+
         unregisterReceiver(receiver);
         super.onDestroy();
     }
