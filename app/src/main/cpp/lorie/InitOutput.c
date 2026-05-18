@@ -37,6 +37,7 @@
 #include "exa.h"
 #include "drm_fourcc.h"
 
+#include "globals.h"
 #include "property.h"
 #include "lorie.h"
 
@@ -693,7 +694,8 @@ static void lorieSetXftDpiResource(int dpi) {
     Atom resourceManager = MakeAtom("RESOURCE_MANAGER", strlen("RESOURCE_MANAGER"), TRUE);
     Atom stringAtom = MakeAtom("STRING", strlen("STRING"), TRUE);
 
-    ChangeWindowProperty(
+    dixChangeWindowProperty(
+        serverClient,
         pScreenPtr->root,
         resourceManager,
         stringAtom,
