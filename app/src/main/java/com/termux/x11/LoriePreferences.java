@@ -304,6 +304,11 @@ public class LoriePreferences extends AppCompatActivity implements PreferenceFra
         androidx.preference.ListPreference listPreference =
             (androidx.preference.ListPreference) preference;
 
+        // Clear SummaryProvider first.
+        // AndroidX Preference can crash if setSummary() is called while a
+        // SummaryProvider is already attached.
+        listPreference.setSummaryProvider(null);
+
         android.content.SharedPreferences sp =
             android.preference.PreferenceManager.getDefaultSharedPreferences(requireContext());
 
@@ -334,6 +339,7 @@ public class LoriePreferences extends AppCompatActivity implements PreferenceFra
         listPreference.setEntries(entries);
         listPreference.setEntryValues(values);
         listPreference.setEnabled(true);
+        listPreference.setSummary(null);
         listPreference.setSummaryProvider(androidx.preference.ListPreference.SimpleSummaryProvider.getInstance());
 
         String current = listPreference.getValue();

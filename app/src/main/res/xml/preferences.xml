@@ -22,7 +22,6 @@
             app:defaultValue="100"
             app:entries="@array/displayDpiScaleEntries"
             app:entryValues="@array/displayDpiScaleValues"
-            app:useSimpleSummaryProvider="true" />
 
         <SwitchPreferenceCompat
             app:key="desktopModeOutputEnabled"
@@ -36,7 +35,6 @@
             app:defaultValue="1920x1080"
             app:entries="@array/desktopModeResolutionEntries"
             app:entryValues="@array/desktopModeResolutionValues"
-            app:useSimpleSummaryProvider="true" />
 
         <ListPreference
             app:key="desktopModeDpiScale"
@@ -45,7 +43,6 @@
             app:defaultValue="100"
             app:entries="@array/displayDpiScaleEntries"
             app:entryValues="@array/displayDpiScaleValues"
-            app:useSimpleSummaryProvider="true" />
         <ListPreference app:key="displayFilteringMode" app:defaultValue="nearest" app:entries="@array/displayFilteringVariants" app:entryValues="@array/displayFilteringVariants"  />
         <SwitchPreferenceCompat app:key="adjustResolution" app:defaultValue="false" />
         <SwitchPreferenceCompat app:key="displayStretch" app:defaultValue="false" />
