@@ -70,8 +70,21 @@ public final class DesktopModeOutputHelper {
             int current = cls.getField("semDesktopModeEnabled").getInt(config);
             return current == enabled;
         } catch (Throwable ignored) {
-            return false;
         }
+
+        /*
+         * Fallback for Samsung DeX / Android Desktop Mode variants where
+         * UI_MODE_TYPE_DESK or Samsung semDesktopModeEnabled is not reliable.
+         *
+         * If Termux:X11 is running on, or can see, a non-default external display,
+         * treat it as Desktop Mode for the separate output profile.
+         */
+        return hasDesktopLikeExternalDisplay(context);
+    }
+
+
+    private static boolean hasDesktopLikeExternalDisplay(Context context) {
+        return findDesktopDisplay(context) != null;
     }
 
     public static Display findDesktopDisplay(Context context) {
