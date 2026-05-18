@@ -1,4 +1,5 @@
 #include <stdio.h>
+extern void lorieSetMonitorResolution(int dpi);
 #include <stdlib.h>
 #include <stdbool.h>
 #include <unistd.h>
@@ -374,12 +375,20 @@ static void sendTextEvent(JNIEnv *env, __unused jobject thiz, jbyteArray text) {
     }
 }
 
+
+static void setDpi(JNIEnv *env, jobject thiz, jint dpi) {
+    (void) env;
+    (void) thiz;
+    lorieSetMonitorResolution((int)dpi);
+}
+
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, __unused void *reserved) {
     JNIEnv* env;
     static JNINativeMethod methods[] = {
             {"nativeInit", "()V", (void *)&nativeInit},
             {"surfaceChanged", "(Landroid/view/Surface;)V", (void *)&rendererSetWindow},
-            {"setViewport", "(IIIIII)V", (void *)&rendererSetViewport},
+            {"setDpi", "(I)V", (void *) &setDpi},
+        {"setViewport", "(IIIIII)V", (void *)&rendererSetViewport},
             {"setFiltering", "(I)V", (void *)&rendererSetFiltering},
             {"connect", "(I)V", (void *)&connect_},
             {"connected", "()Z", (void *)&connected},

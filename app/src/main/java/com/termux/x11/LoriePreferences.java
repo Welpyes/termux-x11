@@ -220,7 +220,7 @@ public class LoriePreferences extends AppCompatActivity implements PreferenceFra
         public void onResume() {
             super.onResume();
             //noinspection DataFlowIssue
-            ((LoriePreferences) getActivity()).getSupportActionBar().setTitle(getPreferenceScreen().getTitle());
+            ((LoriePreferences) getActivity()).getSupportActionBar().setTitle(getPreferenceScreen().getTitle()); /* desktop-output-dpi-refresh-v2 */ updateDesktopModeResolutionList();
         }
 
         /** @noinspection SameParameterValue*/
@@ -297,7 +297,65 @@ public class LoriePreferences extends AppCompatActivity implements PreferenceFra
             setNoActionOptionText(findPreference("mediaKeysAction"), "android media control");
         }
 
-        private void setSummary(CharSequence key, int disabled) {
+        private void updateDesktopModeResolutionList() {
+        Preference preference = findPreference("desktopModeResolution");
+        if (!(preference instanceof androidx.preference.ListPreference)) return;
+
+        androidx.preference.ListPreference listPreference =
+            (androidx.preference.ListPreference) preference;
+
+        android.content.SharedPreferences sp =
+            android.preference.PreferenceManager.getDefaultSharedPreferences(requireContext());
+
+        if (!sp.getBoolean("desktopModeOutputEnabled", false)) {
+            listPreference.setVisible(false);
+            return;
+        }
+
+        listPreference.setVisible(true);
+
+        java.util.List<com.termux.x11.utils.DesktopModeOutputHelper.ResolutionPreset> presets =
+            com.termux.x11.utils.DesktopModeOutputHelper.supportedPresets(requireContext());
+
+        if (presets.isEmpty()) {
+            listPreference.setEnabled(false);
+            listPreference.setSummary(getString(R.string.lorie_pref_desktopModeResolution_summary_unavailable));
+            return;
+        }
+
+        CharSequence[] entries = new CharSequence[presets.size()];
+        CharSequence[] values = new CharSequence[presets.size()];
+
+        for (int i = 0; i < presets.size(); i++) {
+            entries[i] = presets.get(i).title();
+            values[i] = presets.get(i).value();
+        }
+
+        listPreference.setEntries(entries);
+        listPreference.setEntryValues(values);
+        listPreference.setEnabled(true);
+        listPreference.setSummaryProvider(androidx.preference.ListPreference.SimpleSummaryProvider.getInstance());
+
+        String current = listPreference.getValue();
+        boolean supported = false;
+        for (CharSequence value : values) {
+            if (value.toString().equals(current)) {
+                supported = true;
+                break;
+            }
+        }
+
+        if (!supported) {
+            String fallback =
+                com.termux.x11.utils.DesktopModeOutputHelper.resolveDesktopModeResolutionString(
+                    requireContext(),
+                    true,
+                    current,
+                    "1920x1080"
+                );
+            if (fallback != null) listPreference.setValue(fallback);
+        }
+    } private void setSummary(CharSequence key, int disabled) {
             Preference pref = findPreference(key);
             if (pref != null)
                 pref.setSummaryProvider(new Preference.SummaryProvider<>() {
@@ -333,7 +391,12 @@ public class LoriePreferences extends AppCompatActivity implements PreferenceFra
             String displayResMode = prefs.displayResolutionMode.get();
             setVisible("displayScale", displayResMode.contentEquals("scaled"));
             setVisible("displayResolutionExact", displayResMode.contentEquals("exact"));
-            setVisible("displayResolutionCustom", displayResMode.contentEquals("custom"));
+            setVisible("displayResolutionCustom", displayResMode.contentEquals("custom")); android.content.SharedPreferences outputPrefs =
+            android.preference.PreferenceManager.getDefaultSharedPreferences(requireContext());
+        boolean desktopModeOutputEnabled = outputPrefs.getBoolean("desktopModeOutputEnabled", false);
+        setVisible("desktopModeResolution", desktopModeOutputEnabled);
+        setVisible("desktopModeDpiScale", desktopModeOutputEnabled);
+        updateDesktopModeResolutionList();
 
             setEnabled("dexMetaKeyCapture", !prefs.enableAccessibilityServiceAutomatically.get());
             setEnabled("enableAccessibilityServiceAutomatically", !prefs.dexMetaKeyCapture.get());

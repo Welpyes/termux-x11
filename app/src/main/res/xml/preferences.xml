@@ -14,6 +14,38 @@
         <SeekBarPreference app:key="displayScale" app:defaultValue="100" app:min="30" android:max="300" app:seekBarIncrement="10" app:showSeekBarValue="true" app:updatesContinuously="true" />
         <ListPreference app:key="displayResolutionExact" app:defaultValue="1280x1024" app:entries="@array/displayResolution" app:entryValues="@array/displayResolution" tools:ignore="DuplicateSpeakableTextCheck" />
         <EditTextPreference app:key="displayResolutionCustom" app:defaultValue="1280x1024" app:useSimpleSummaryProvider="true" />
+
+        <ListPreference
+            app:key="displayDpiScale"
+            app:title="@string/lorie_pref_displayDpiScale"
+            app:summary="@string/lorie_pref_displayDpiScale_summary"
+            app:defaultValue="100"
+            app:entries="@array/displayDpiScaleEntries"
+            app:entryValues="@array/displayDpiScaleValues"
+            app:useSimpleSummaryProvider="true" />
+
+        <SwitchPreferenceCompat
+            app:key="desktopModeOutputEnabled"
+            app:title="@string/lorie_pref_desktopModeOutputEnabled"
+            app:summary="@string/lorie_pref_desktopModeOutputEnabled_summary"
+            app:defaultValue="false" />
+
+        <ListPreference
+            app:key="desktopModeResolution"
+            app:title="@string/lorie_pref_desktopModeResolution"
+            app:defaultValue="1920x1080"
+            app:entries="@array/desktopModeResolutionEntries"
+            app:entryValues="@array/desktopModeResolutionValues"
+            app:useSimpleSummaryProvider="true" />
+
+        <ListPreference
+            app:key="desktopModeDpiScale"
+            app:title="@string/lorie_pref_desktopModeDpiScale"
+            app:summary="@string/lorie_pref_desktopModeDpiScale_summary"
+            app:defaultValue="100"
+            app:entries="@array/displayDpiScaleEntries"
+            app:entryValues="@array/displayDpiScaleValues"
+            app:useSimpleSummaryProvider="true" />
         <ListPreference app:key="displayFilteringMode" app:defaultValue="nearest" app:entries="@array/displayFilteringVariants" app:entryValues="@array/displayFilteringVariants"  />
         <SwitchPreferenceCompat app:key="adjustResolution" app:defaultValue="false" />
         <SwitchPreferenceCompat app:key="displayStretch" app:defaultValue="false" />

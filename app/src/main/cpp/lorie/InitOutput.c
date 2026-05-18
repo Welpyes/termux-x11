@@ -671,6 +671,31 @@ static Bool lorieScreenInit(ScreenPtr pScreen, unused int argc, unused char **ar
     return TRUE;
 }                               /* end lorieScreenInit */
 
+
+void lorieSetMonitorResolution(int dpi) {
+    if (dpi <= 0)
+        dpi = 96;
+
+    if (monitorResolution == dpi)
+        return;
+
+    monitorResolution = dpi;
+
+    if (pScreenPtr == NULL)
+        return;
+
+    CARD32 mmWidth = (CARD32)(((double)pScreenPtr->width) * 25.4 / monitorResolution + 0.5);
+    CARD32 mmHeight = (CARD32)(((double)pScreenPtr->height) * 25.4 / monitorResolution + 0.5);
+
+    pScreenPtr->mmWidth = mmWidth;
+    pScreenPtr->mmHeight = mmHeight;
+
+    if (pScreenPtr->root != NULL) {
+        RRScreenSizeSet(pScreenPtr, pScreenPtr->width, pScreenPtr->height, mmWidth, mmHeight);
+        RRScreenSizeNotify(pScreenPtr);
+    }
+}
+
 void lorieConfigureNotify(int width, int height, int framerate, size_t name_size, char* name) {
     ScreenPtr pScreen = pScreenPtr;
     RROutputPtr output = RRFirstOutput(pScreen);
@@ -690,7 +715,7 @@ void lorieConfigureNotify(int width, int height, int framerate, size_t name_size
         CARD32 mmWidth, mmHeight;
         RRModePtr mode = lorieCvt(width, height, framerate);
         mmWidth = ((double) (mode->mode.width)) * 25.4 / monitorResolution;
-        mmHeight = ((double) (mode->mode.width)) * 25.4 / monitorResolution;
+        mmHeight = ((double) (mode->mode.height)) * 25.4 / monitorResolution;
         RROutputSetModes(output, &mode, 1, 0);
         RRCrtcNotify(RRFirstEnabledCrtc(pScreen), mode, 0, 0, RR_Rotate_0, NULL, 1, &output);
         RRScreenSizeSet(pScreen, mode->mode.width, mode->mode.height, mmWidth, mmHeight);

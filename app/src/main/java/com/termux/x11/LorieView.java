@@ -638,6 +638,27 @@ public class LorieView extends SurfaceView implements InputStub {
             }
         }
 
+        android.content.SharedPreferences outputPrefs =
+            android.preference.PreferenceManager.getDefaultSharedPreferences(getContext());
+
+        String desktopModeResolution =
+            com.termux.x11.utils.DesktopModeOutputHelper.resolveDesktopModeResolutionString(
+                getContext(),
+                outputPrefs.getBoolean("desktopModeOutputEnabled", false),
+                outputPrefs.getString("desktopModeResolution", "1920x1080"),
+                w + "x" + h
+            );
+
+        if (desktopModeResolution != null) {
+            int[] desktopModeSize =
+                com.termux.x11.utils.DesktopModeOutputHelper.parseResolution(desktopModeResolution);
+
+            if (desktopModeSize != null) {
+                w = desktopModeSize[0];
+                h = desktopModeSize[1];
+            }
+        }
+
         if (prefs.adjustResolution.get() && ((width < height && w > h) || (width > height && w < h)))
             p.set(h, w);
         else
@@ -679,6 +700,16 @@ public class LorieView extends SurfaceView implements InputStub {
         int top = availableTop + (availableH - drawH) / 2;
 
         viewport.set(left, top, left + drawW, top + drawH);
+        android.content.SharedPreferences outputPrefs =
+            android.preference.PreferenceManager.getDefaultSharedPreferences(getContext());
+
+        setDpi(com.termux.x11.utils.DesktopModeOutputHelper.resolveX11Dpi(
+            getContext(),
+            outputPrefs.getBoolean("desktopModeOutputEnabled", false),
+            outputPrefs.getString("displayDpiScale", "100"),
+            outputPrefs.getString("desktopModeDpiScale", "100")
+        ));
+
         setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.x, p.y);
 
         if (mCallback != null)
@@ -849,7 +880,7 @@ public class LorieView extends SurfaceView implements InputStub {
     @FastNative public native void sendClipboardAnnounce();
     @FastNative public native void sendClipboardEvent(byte[] text);
     @FastNative static native void sendWindowChange(int width, int height, int framerate, String name);
-    @FastNative static native void setViewport(int x, int y, int width, int height, int expectedWidth, int expectedHeight);
+    @FastNative static native void setDpi(int dpi); @FastNative static native void setViewport(int x, int y, int width, int height, int expectedWidth, int expectedHeight);
     @FastNative public native void sendMouseEvent(float x, float y, int whichButton, boolean buttonDown, boolean relative);
     @FastNative public native void sendTouchEvent(int action, int id, int x, int y);
     @FastNative public native void sendStylusEvent(float x, float y, int pressure, int tiltX, int tiltY, int orientation, int buttons, boolean eraser, boolean mouseMode);
