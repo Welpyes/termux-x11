@@ -24,6 +24,7 @@
 #include <arpa/inet.h>
 #include <poll.h>
 #include "lorie.h"
+extern void lorieSetMonitorResolution(int dpi);
 
 #define log(prio, ...) __android_log_print(ANDROID_LOG_ ## prio, "LorieNative", __VA_ARGS__)
 
@@ -212,7 +213,7 @@ static Bool sendConfigureNotify(__unused ClientPtr pClient, void *closure) {
     // This must be done only on X server thread.
     lorieEvent* e = closure;
     __android_log_print(ANDROID_LOG_ERROR, "tx11-request", "window changed: %d %d %s", e->screenSize.width, e->screenSize.height, e->screenSize.name);
-    lorieConfigureNotify(e->screenSize.width, e->screenSize.height, e->screenSize.framerate, e->screenSize.name_size, e->screenSize.name);
+    lorieSetMonitorResolution(e->screenSize.dpi > 0 ? e->screenSize.dpi : 96); lorieConfigureNotify(e->screenSize.width, e->screenSize.height, e->screenSize.framerate, e->screenSize.name_size, e->screenSize.name);
     free(e);
     return TRUE;
 }

@@ -112,7 +112,7 @@ typedef union {
     struct {
         uint8_t t;
         uint16_t width, height, framerate;
-        size_t name_size;
+        int dpi; size_t name_size;
         char *name;
     } screenSize;
     struct {

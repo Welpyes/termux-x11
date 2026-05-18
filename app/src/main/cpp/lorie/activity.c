@@ -23,7 +23,8 @@ extern void lorieSetMonitorResolution(int dpi);
 #pragma ide diagnostic ignored "ConstantFunctionResult"
 #define log(prio, ...) __android_log_print(ANDROID_LOG_ ## prio, "LorieNative", __VA_ARGS__)
 
-extern volatile int conn_fd; // The only variable from shared with X server code.
+extern volatile int conn_fd;
+static int pendingMonitorDpi = 96; // The only variable from shared with X server code.
 
 static struct {
     jclass self;
@@ -286,7 +287,7 @@ static void sendClipboardEvent(JNIEnv *env, __unused jobject thiz, jbyteArray te
 static void sendWindowChange(__unused JNIEnv* env, __unused jobject cls, jint width, jint height, jint framerate, jstring jname) {
     if (conn_fd != -1) {
         const char *name = (!jname || width <= 0 || height <= 0) ? NULL : (*env)->GetStringUTFChars(env, jname, JNI_FALSE);
-        lorieEvent e = { .screenSize = { .t = EVENT_SCREEN_SIZE, .width = width, .height = height, .framerate = framerate, .name_size = (name ? strlen(name) : 0) } };
+        lorieEvent e = { .screenSize = { .t = EVENT_SCREEN_SIZE, .width = width, .height = height, .framerate = framerate, .dpi = pendingMonitorDpi, .name_size = (name ? strlen(name) : 0) } };
         write(conn_fd, &e, sizeof(e));
         if (name) {
             write(conn_fd, name, strlen(name));
@@ -379,7 +380,7 @@ static void sendTextEvent(JNIEnv *env, __unused jobject thiz, jbyteArray text) {
 static void setDpi(JNIEnv *env, jobject thiz, jint dpi) {
     (void) env;
     (void) thiz;
-    lorieSetMonitorResolution((int)dpi);
+    pendingMonitorDpi = dpi > 0 ? (int)dpi : 96;
 }
 
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, __unused void *reserved) {
