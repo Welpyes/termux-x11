@@ -75,13 +75,50 @@ import java.util.Map;
 @SuppressWarnings({"deprecation", "unused"})
 public class MainActivity extends AppCompatActivity {
     
-    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener outputProfilePreferenceListener =
+    
+    private final android.hardware.display.DisplayManager.DisplayListener outputDisplayListener =
+            new android.hardware.display.DisplayManager.DisplayListener() {
+                @Override
+                public void onDisplayAdded(int displayId) {
+                    scheduleOutputProfileRefresh("display-added");
+                }
+
+                @Override
+                public void onDisplayRemoved(int displayId) {
+                    scheduleOutputProfileRefresh("display-removed");
+                }
+
+                @Override
+                public void onDisplayChanged(int displayId) {
+                    scheduleOutputProfileRefresh("display-changed");
+                }
+            };
+
+    private void scheduleOutputProfileRefresh(String reason) {
+        final long[] delays = new long[] { 0L, 250L, 1000L, 2000L };
+
+        for (long delay : delays) {
+            handler.postDelayed(() -> {
+                try {
+                    LorieView view = findViewById(R.id.lorieView);
+                    if (view != null) {
+                        Log.d("MainActivity", "refresh output profile: " + reason);
+                        view.triggerCallback();
+                    }
+                } catch (Throwable t) {
+                    Log.w("MainActivity", "failed to refresh output profile: " + reason, t);
+                }
+            }, delay);
+        }
+    }
+
+private final android.content.SharedPreferences.OnSharedPreferenceChangeListener outputProfilePreferenceListener =
             (sharedPreferences, key) -> {
                 if (!isOutputProfilePreferenceKey(key)) {
                     return;
                 }
 
-                onPreferencesChanged(key);
+                onPreferencesChanged(key); scheduleOutputProfileRefresh("output-profile-preference");
             };
 
     private static boolean isOutputProfilePreferenceKey(String key) {
@@ -123,7 +160,7 @@ public static final String ACTION_STOP = "com.termux.x11.ACTION_STOP";
             if (ACTION_START.equals(intent.getAction())) {
                 try {
                     Log.v("LorieBroadcastReceiver", "Got new ACTION_START intent");
-                    onReceiveConnection(intent);
+                    onReceiveConnection(intent); scheduleOutputProfileRefresh("action-start");
                 } catch (Exception e) {
                     Log.e("MainActivity", "Something went wrong while we extracted connection details from binder.", e);
                 }
@@ -253,6 +290,18 @@ private void runTermuxCommandFromTopApp(Intent intent) {
         getWindow().setFlags(FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS | FLAG_KEEP_SCREEN_ON | FLAG_TRANSLUCENT_STATUS, 0);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         setContentView(R.layout.main_activity);
+        try {
+            android.hardware.display.DisplayManager displayManager =
+                    (android.hardware.display.DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+            if (displayManager != null) {
+                displayManager.registerDisplayListener(outputDisplayListener, handler);
+            }
+        } catch (Throwable t) {
+            Log.w("MainActivity", "failed to register display listener", t);
+        }
+
+        scheduleOutputProfileRefresh("on-create");
+
 
         frm = findViewById(R.id.frame);
         findViewById(R.id.preferences_button).setOnClickListener((l) -> startActivity(new Intent(this, LoriePreferences.class) {{ setAction(Intent.ACTION_MAIN); }}));
@@ -343,6 +392,15 @@ private void runTermuxCommandFromTopApp(Intent intent) {
         android.preference.PreferenceManager
                 .getDefaultSharedPreferences(this)
                 .unregisterOnSharedPreferenceChangeListener(outputProfilePreferenceListener);
+        try {
+            android.hardware.display.DisplayManager displayManager =
+                    (android.hardware.display.DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+            if (displayManager != null) {
+                displayManager.unregisterDisplayListener(outputDisplayListener);
+            }
+        } catch (Throwable ignored) {
+        }
+
 
 
         unregisterReceiver(receiver);
@@ -708,6 +766,8 @@ private void runTermuxCommandFromTopApp(Intent intent) {
 
     @Override
     public void onResume() {
+        scheduleOutputProfileRefresh("on-resume");
+
         super.onResume();
 
         mNotification = buildNotification();
@@ -827,6 +887,8 @@ private void runTermuxCommandFromTopApp(Intent intent) {
     @SuppressLint("WrongConstant")
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
+        if (hasFocus) scheduleOutputProfileRefresh("window-focus");
+
         super.onWindowFocusChanged(hasFocus);
         KeyInterceptor.recheck();
         prefs.recheckStoringSecondaryDisplayPreferences();
@@ -1004,4 +1066,18 @@ private void runTermuxCommandFromTopApp(Intent intent) {
             inputMethodManager.hideSoftInputFromWindow(getWindow().getDecorView().getRootView().getWindowToken(), 0);
         getLorieView().requestFocus();
     }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        scheduleOutputProfileRefresh("configuration-changed");
+    }
+
+
+    @Override
+    public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        scheduleOutputProfileRefresh("picture-in-picture");
+    }
+
 }
