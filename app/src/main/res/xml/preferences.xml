@@ -15,10 +15,6 @@
         <ListPreference app:key="displayResolutionExact" app:defaultValue="1280x1024" app:entries="@array/displayResolution" app:entryValues="@array/displayResolution" tools:ignore="DuplicateSpeakableTextCheck" />
         <EditTextPreference app:key="displayResolutionCustom" app:defaultValue="1280x1024" app:useSimpleSummaryProvider="true" />
 
-        
-
-        
-
         <ListPreference
             app:key="displayDpiScale"
             app:title="@string/lorie_pref_displayDpiScale"
@@ -51,10 +47,10 @@
         <SwitchPreferenceCompat app:key="displayStretch" app:defaultValue="false" />
         <SwitchPreferenceCompat app:key="Reseed" app:defaultValue="true" />
         <SwitchPreferenceCompat app:key="PIP" app:defaultValue="false" />
-        <SwitchPreferenceCompat app:key="fullscreen" app:defaultValue="false"     app:title="@string/lorie_pref_xserver_fullscreen"
-            app:summary="@string/lorie_pref_xserver_fullscreen_summary"
+        <SwitchPreferenceCompat app:key="fullscreen" app:defaultValue="false"     app:title="@string/lorie_pref_fullscreen"
+            app:summary="@string/lorie_pref_fullscreen_summary"
         />
-        <ListPreference app:key="forceOrientation" app:defaultValue="auto" app:entries="@array/forceOrientationVariants" app:entryValues="@array/forceOrientationVariants" />
+        <ListPreference app:key="forceOrientation" app:defaultValue="auto" app:entries="@array/forceOrientationEntries" app:entryValues="@array/forceOrientationVariants" />
         <SwitchPreferenceCompat app:key="hideCutout" app:defaultValue="false" />
         <SwitchPreferenceCompat app:defaultValue="true" app:key="keepScreenOn" />
     </PreferenceScreen>

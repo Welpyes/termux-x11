@@ -128,4 +128,12 @@
         <item>3840x2160</item>
     </string-array>
 
+    <string-array name="forceOrientationEntries">
+        <item>auto</item>
+        <item>Portrait</item>
+        <item>Landscape</item>
+        <item>reverse portrait</item>
+        <item>reverse landscape</item>
+    </string-array>
+
 </resources>
