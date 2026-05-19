@@ -68,7 +68,7 @@ public final class DesktopModeOutputHelper {
             Class<?> cls = config.getClass();
             int enabled = cls.getField("SEM_DESKTOP_MODE_ENABLED").getInt(cls);
             int current = cls.getField("semDesktopModeEnabled").getInt(config);
-            return current == enabled;
+            if (current == enabled) { return true; }
         } catch (Throwable ignored) {
         }
 
