@@ -573,6 +573,24 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
     }
 
     int surfaceH = ANativeWindow_getHeight(win);
+    int surfaceW = ANativeWindow_getWidth(win);
+    
+/*
+     * clear stale area outside X viewport
+     *
+     * When viewport changes after PiP/Desktop Mode/DPI refresh, only the
+     * X viewport is redrawn. Pixels outside the new viewport can keep old
+     * Surface contents, which appears as a PiP-like ghost image.
+     */
+    if (surfaceW > 0 && surfaceH > 0 &&
+            (viewportX != 0 || viewportY != 0 ||
+             viewportW != surfaceW || viewportH != surfaceH)) {
+        glViewport(0, 0, surfaceW, surfaceH);
+        glDisable(GL_SCISSOR_TEST);
+        glClearColor(0.f, 0.f, 0.f, 1.f);
+        glClear(GL_COLOR_BUFFER_BIT);
+    }
+
     glViewport(viewportX, surfaceH - viewportY - viewportH, viewportW, viewportH);
 
     // We should signal X server to not use root window while we actively copy it
