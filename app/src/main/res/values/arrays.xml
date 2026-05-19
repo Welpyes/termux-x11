@@ -24,12 +24,7 @@
         <item>ud</item>
         <item>at</item>
     </string-array>
-                    <string-array name="displayResolutionVariants">
-        <item>native</item>
-        <item>exact</item>
-        <item>custom</item>
-    </string-array>
-                    <string-array name="displayResolution">
+<string-array name="displayResolution">
         <item>320x200</item>
         <item>320x240</item>
         <item>400x240</item>
@@ -127,13 +122,16 @@
         <item>3440x1440</item>
         <item>3840x2160</item>
     </string-array>
-
+<string-array name="displayResolutionVariants">
+        <item>native</item>
+        <item>exact</item>
+        <item>custom</item>
+    </string-array>
     <string-array name="forceOrientationEntries">
-        <item>auto</item>
+        <item>Auto</item>
         <item>Portrait</item>
         <item>Landscape</item>
-        <item>reverse portrait</item>
-        <item>reverse landscape</item>
+        <item>Reverse portrait</item>
+        <item>Reverse landscape</item>
     </string-array>
-
 </resources>

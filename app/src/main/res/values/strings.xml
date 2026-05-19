@@ -46,9 +46,7 @@ E.g. <b>META</b> for <i>META key</i>, \n
     <string name="lorie_pref_Reseed_summary">The screen size will be adjusted while Soft Keyboard is open.</string>
     <string name="lorie_pref_PIP">PIP mode</string>
     <string name="lorie_pref_PIP_summary">Show app in picture-in-picture mode when home button or recents button is pressed</string>
-        <string name="lorie_pref_fullscreen">X server fullscreen</string>
-        <string name="lorie_pref_fullscreen_summary">Show the X server surface in Android fullscreen mode.</string>
-    <string name="lorie_pref_forceOrientation">Screen orientation</string>
+<string name="lorie_pref_forceOrientation">Screen orientation</string>
     <string name="lorie_pref_hideCutout">Hide display cutout (if any)</string>
     <string name="lorie_pref_keepScreenOn">Keep Screen On</string>
 
@@ -130,7 +128,8 @@ E.g. <b>META</b> for <i>META key</i>, \n
     <string name="lorie_pref_desktopModeResolution_summary_unavailable">No supported external display resolution detected</string>
     <string name="lorie_pref_desktopModeDpiScale">Desktop Mode Xft DPI scale</string>
     <string name="lorie_pref_desktopModeDpiScale_summary">Sets the Xft.dpi scaling hint used only when Desktop Mode or DeX is active.</string>
-
-        <string name="lorie_pref_xserver_fullscreen">X server fullscreen</string>
-        <string name="lorie_pref_xserver_fullscreen_summary">Show the X server surface in Android fullscreen mode.</string>
+<string name="lorie_pref_fullscreen">X server fullscreen</string>
+    <string name="lorie_pref_xserver_fullscreen">X server fullscreen</string>
+    <string name="lorie_pref_fullscreen_summary">Show the X server surface in Android fullscreen mode.</string>
+    <string name="lorie_pref_xserver_fullscreen_summary">Show the X server surface in Android fullscreen mode.</string>
 </resources>

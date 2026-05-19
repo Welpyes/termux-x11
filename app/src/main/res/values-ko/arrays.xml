@@ -1,12 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
     <string-array name="forceOrientationEntries">
-        <item>auto</item>
+        <item>자동</item>
         <item>세로</item>
         <item>가로</item>
-        <item>reverse portrait</item>
-        <item>reverse landscape</item>
+        <item>역방향 세로</item>
+        <item>역방향 가로</item>
     </string-array>
-
 </resources>
