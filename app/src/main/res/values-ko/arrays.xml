@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="displayResolutionVariants">
+        <item>네이티브</item>
+        <item>고정 해상도</item>
+        <item>사용자 지정</item>
+    </string-array>
+
+</resources>
