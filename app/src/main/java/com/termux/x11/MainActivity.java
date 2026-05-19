@@ -876,6 +876,7 @@ private void runTermuxCommandFromTopApp(Intent intent) {
     @Override
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        scheduleOutputProfileRefresh("configuration-changed");
 
         if (newConfig.orientation != orientation)
             inputMethodManager.hideSoftInputFromWindow(getWindow().getDecorView().getRootView().getWindowToken(), 0);
@@ -990,6 +991,7 @@ private void runTermuxCommandFromTopApp(Intent intent) {
         findViewById(R.id.mouse_helper_visibility).setAlpha(isInPictureInPictureMode ? 0.f : 1.f);
 
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        scheduleOutputProfileRefresh("picture-in-picture");
     }
 
     /**
@@ -1067,17 +1069,9 @@ private void runTermuxCommandFromTopApp(Intent intent) {
         getLorieView().requestFocus();
     }
 
-    @Override
-    public void onConfigurationChanged(Configuration newConfig) {
-        super.onConfigurationChanged(newConfig);
-        scheduleOutputProfileRefresh("configuration-changed");
-    }
+    
 
 
-    @Override
-    public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
-        scheduleOutputProfileRefresh("picture-in-picture");
-    }
+    
 
 }
