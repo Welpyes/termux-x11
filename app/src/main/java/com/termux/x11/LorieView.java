@@ -609,7 +609,31 @@ public class LorieView extends SurfaceView implements InputStub {
     }
 
     
-    private boolean isDesktopModeOutputProfileActive(android.content.SharedPreferences outputPrefs) {
+    
+    public void refreshOutputProfileDpi() {
+        android.content.SharedPreferences outputPrefs =
+                android.preference.PreferenceManager.getDefaultSharedPreferences(getContext());
+
+        boolean active = isDesktopModeOutputProfileActive(outputPrefs);
+        desktopModeOutputProfileActive = active;
+
+        String outputDpiScale = active
+                ? outputPrefs.getString("desktopModeDpiScale", "100")
+                : outputPrefs.getString("displayDpiScale", "100");
+
+        Log.d("LorieView", "refresh Xft DPI profile="
+                + (active ? "desktop" : "normal")
+                + " scale=" + outputDpiScale);
+
+        setDpi(com.termux.x11.utils.DesktopModeOutputHelper.resolveX11Dpi(
+                getContext(),
+                false,
+                outputDpiScale,
+                outputDpiScale
+        ));
+    }
+
+private boolean isDesktopModeOutputProfileActive(android.content.SharedPreferences outputPrefs) {
         if (!outputPrefs.getBoolean("desktopModeOutputEnabled", false)) {
             return false;
         }
@@ -729,31 +753,7 @@ void getDimensionsFromSettings(int width, int height) {
         int left = availableLeft + (availableW - drawW) / 2;
         int top = availableTop + (availableH - drawH) / 2;
 
-        viewport.set(left, top, left + drawW, top + drawH);
-        android.content.SharedPreferences outputPrefs =
-                android.preference.PreferenceManager.getDefaultSharedPreferences(getContext());
-
-        /*
-         * getDimensionsFromSettings() has already selected the active output
-         * profile for this updateViewport() pass.  Xft DPI must follow that
-         * exact same profile.
-         */
-        String outputDpiScale = desktopModeOutputProfileActive
-                ? outputPrefs.getString("desktopModeDpiScale", "100")
-                : outputPrefs.getString("displayDpiScale", "100");
-
-        Log.d("LorieView", "Xft DPI profile="
-                + (desktopModeOutputProfileActive ? "desktop" : "normal")
-                + " scale=" + outputDpiScale);
-
-        setDpi(com.termux.x11.utils.DesktopModeOutputHelper.resolveX11Dpi(
-                getContext(),
-                false,
-                outputDpiScale,
-                outputDpiScale
-        ));
-
-setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.x, p.y);
+        viewport.set(left, top, left + drawW, top + drawH); refreshOutputProfileDpi(); setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.x, p.y);
 
         if (mCallback != null)
             mCallback.changed(availableW, availableH, p.x, p.y);

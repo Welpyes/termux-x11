@@ -103,7 +103,7 @@ public class MainActivity extends AppCompatActivity {
                     LorieView view = findViewById(R.id.lorieView);
                     if (view != null) {
                         Log.d("MainActivity", "refresh output profile: " + reason);
-                        view.triggerCallback();
+                        view.refreshOutputProfileDpi(); view.triggerCallback();
                     }
                 } catch (Throwable t) {
                     Log.w("MainActivity", "failed to refresh output profile: " + reason, t);
@@ -737,7 +737,7 @@ private void runTermuxCommandFromTopApp(Intent intent) {
 
         setTerminalToolbarView();
 
-        lorieView.triggerCallback();
+        lorieView.refreshOutputProfileDpi(); lorieView.triggerCallback();
 
         filterOutWinKey = prefs.filterOutWinkey.get();
         if (prefs.enableAccessibilityServiceAutomatically.get())
