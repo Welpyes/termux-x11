@@ -792,7 +792,7 @@ public class TouchInputHandler {
          * Android pointer capture is normally released by Esc.
          *
          * For DeX fullscreen we want bare Esc to keep working inside X11 apps
-         * without accidentally exposing the DeX title bar.  Therefore:
+         * without accidentally exposing the DeX title bar:
          *
          *   - Esc           -> send to X11, then request capture again
          *   - Ctrl+Alt+Esc  -> release Android pointer capture intentionally
@@ -838,7 +838,7 @@ public class TouchInputHandler {
 
         if (k == KEYCODE_BACK) {
             if (e.isFromSource(InputDevice.SOURCE_MOUSE) || e.isFromSource(InputDevice.SOURCE_MOUSE_RELATIVE)) {
-                if (e.getRepeatCount() != 0) // ignore auto-repeat
+                if (e.getRepeatCount() != 0)
                     return true;
                 if (e.getAction() == KeyEvent.ACTION_UP || e.getAction() == KeyEvent.ACTION_DOWN)
                     mActivity.getLorieView().sendMouseEvent(-1, -1, InputStub.BUTTON_RIGHT, e.getAction() == KeyEvent.ACTION_DOWN, true);
@@ -917,7 +917,57 @@ public class TouchInputHandler {
             for (int[] button: buttons)
                 if (isMouseButtonChanged(button[0]))
                     mInjector.sendMouseEvent(null, button[1], mouseButtonDown(button[0]), true);
-            savedBS = currentBS; return true; } private float[] adjustCapturedMouseDelta(MotionEvent e, float dx, float dy) { float base = mInjector.capturedPointerSpeedFactor * mInjector.capturedMouseSpeedFactor * mMetrics.density; if (!mInjector.capturedMouseDexLikeAcceleration || mInjector.capturedMouseAcceleration <= 0f) { adjustedMouseDelta[0] = dx * base; adjustedMouseDelta[1] = dy * base; return adjustedMouseDelta; } long eventTimeMs = e.getEventTime(); float dtMs = lastCapturedMouseEventTimeMs == 0 ? 16f : MathUtils.clamp((float) (eventTimeMs - lastCapturedMouseEventTimeMs), 1f, 64f); lastCapturedMouseEventTimeMs = eventTimeMs; float distance = (float) Math.hypot(dx, dy); float velocity = distance / dtMs; float gain = 1.0f + mInjector.capturedMouseAcceleration * Math.min(2.5f, velocity * 0.35f); gain = MathUtils.clamp(gain, 0.75f, 3.5f); adjustedMouseDelta[0] = dx * base * gain; adjustedMouseDelta[1] = dy * base * gain; return adjustedMouseDelta; } } private class StylusListener {
+            savedBS = currentBS; return true; } private boolean useDexCapturedMouseProfile() {
+                Display display = mActivity.getLorieView().getDisplay();
+                return display != null
+                        && display.getDisplayId() != Display.DEFAULT_DISPLAY
+                        && SamsungDexUtils.checkDeXEnabled(mActivity);
+            }
+
+            private float[] adjustCapturedMouseDelta(MotionEvent e, float dx, float dy) {
+                /*
+                 * DeX external display uses the tuned DeX-like captured mouse profile.
+                 * Built-in/on-screen mode keeps the legacy captured pointer scaling only,
+                 * otherwise the DeX-tuned 190/110 profile is too fast on the device screen.
+                 */
+                if (!useDexCapturedMouseProfile()) {
+                    float base = mInjector.capturedPointerSpeedFactor * mMetrics.density;
+                    adjustedMouseDelta[0] = dx * base;
+                    adjustedMouseDelta[1] = dy * base;
+                    lastCapturedMouseEventTimeMs = 0;
+                    return adjustedMouseDelta;
+                }
+
+                float base = mInjector.capturedPointerSpeedFactor
+                        * mInjector.capturedMouseSpeedFactor
+                        * mMetrics.density;
+
+                if (!mInjector.capturedMouseDexLikeAcceleration
+                        || mInjector.capturedMouseAcceleration <= 0f) {
+                    adjustedMouseDelta[0] = dx * base;
+                    adjustedMouseDelta[1] = dy * base;
+                    return adjustedMouseDelta;
+                }
+
+                long eventTimeMs = e.getEventTime();
+                float dtMs = lastCapturedMouseEventTimeMs == 0
+                        ? 16f
+                        : MathUtils.clamp((float) (eventTimeMs - lastCapturedMouseEventTimeMs), 1f, 64f);
+                lastCapturedMouseEventTimeMs = eventTimeMs;
+
+                float distance = (float) Math.hypot(dx, dy);
+                float velocity = distance / dtMs;
+                float gain = 1.0f
+                        + mInjector.capturedMouseAcceleration
+                        * Math.min(2.5f, velocity * 0.35f);
+                gain = MathUtils.clamp(gain, 0.75f, 3.5f);
+
+                adjustedMouseDelta[0] = dx * base * gain;
+                adjustedMouseDelta[1] = dy * base * gain;
+                return adjustedMouseDelta;
+            }
+        }
+        private class StylusListener {
         private float x = 0, y = 0, pressure = 0, tilt = 0, orientation = 0;
         private int buttons = 0;
 
