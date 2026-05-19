@@ -1,10 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string-array name="forceOrientationEntries">
-        <item>자동</item>
-        <item>세로</item>
-        <item>가로</item>
-        <item>역방향 세로</item>
-        <item>역방향 가로</item>
+    <string-array name="transformCapturedPointerEntries">
+        <item>아니오</item>
+        <item>시계 방향</item>
+        <item>반시계 방향</item>
+        <item>거꾸로</item>
+        <item>자동 (터치패드용)</item>
+    </string-array>
+    <string-array name="displayResolutionVariants">
+        <item>기본</item>
+        <item>고정 해상도</item>
+        <item>사용자 지정</item>
+    </string-array>
+    <string-array name="touchscreenInputModesEntries">
+        <item>터치패드</item>
+        <item>가상 터치스크린</item>
+        <item>직접 터치</item>
     </string-array>
 </resources>

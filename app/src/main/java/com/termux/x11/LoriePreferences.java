@@ -294,7 +294,7 @@ public class LoriePreferences extends AppCompatActivity implements PreferenceFra
 
             setNoActionOptionText(findPreference("volumeDownAction"), "android volume control");
             setNoActionOptionText(findPreference("volumeUpAction"), "android volume control");
-            setNoActionOptionText(findPreference("mediaKeysAction"), "android media control");
+            setNoActionOptionText(findPreference("mediaKeysAction"), "android media control"); installPointerCaptureVisibilityListener(); updateCapturedMouseOptionsVisibility();
         }
     private void updateDesktopModeResolutionList() {
         Preference preference = findPreference("desktopModeResolution");
@@ -370,7 +370,7 @@ public class LoriePreferences extends AppCompatActivity implements PreferenceFra
                 });
         }
 
-        private void setVisible(CharSequence key, boolean value) {
+        private void setCapturedMouseOptionsVisible(boolean visible) { setVisible("capturedMouseDexLikeAcceleration", visible); setVisible("capturedMouseSpeedFactor", visible); setVisible("capturedMouseAcceleration", visible); } private void updateCapturedMouseOptionsVisibility() { setCapturedMouseOptionsVisible(prefs.pointerCapture.get()); } private void installPointerCaptureVisibilityListener() { Preference pointerCapturePreference = findPreference("pointerCapture"); if (pointerCapturePreference != null) pointerCapturePreference.setOnPreferenceChangeListener((preference, newValue) -> { setCapturedMouseOptionsVisible(Boolean.TRUE.equals(newValue)); return true; }); } private void setVisible(CharSequence key, boolean value) {
             Preference p = findPreference(key);
             if (p != null)
                 p.setVisible(value);
@@ -421,7 +421,7 @@ public class LoriePreferences extends AppCompatActivity implements PreferenceFra
             boolean requestNotificationPermissionVisible =
                     Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
                     && ContextCompat.checkSelfPermission(requireContext(), POST_NOTIFICATIONS) == PERMISSION_DENIED;
-            setVisible("requestNotificationPermission", requestNotificationPermissionVisible);
+            setVisible("requestNotificationPermission", requestNotificationPermissionVisible); updateCapturedMouseOptionsVisibility();
         }
 
         /** @noinspection SameParameterValue*/
