@@ -95,7 +95,7 @@ public class MainActivity extends AppCompatActivity {
             };
 
     private void scheduleOutputProfileRefresh(String reason) {
-        final long[] delays = new long[] { 0L, 250L, 1000L, 2000L };
+        final long[] delays = new long[] { 0L, 250L, 1000L, 2000L, 4000L };
 
         for (long delay : delays) {
             handler.postDelayed(() -> {
@@ -103,7 +103,7 @@ public class MainActivity extends AppCompatActivity {
                     LorieView view = findViewById(R.id.lorieView);
                     if (view != null) {
                         Log.d("MainActivity", "refresh output profile: " + reason);
-                        view.refreshOutputProfileDpi(); view.triggerCallback();
+                        view.triggerCallback();
                     }
                 } catch (Throwable t) {
                     Log.w("MainActivity", "failed to refresh output profile: " + reason, t);
@@ -737,7 +737,7 @@ private void runTermuxCommandFromTopApp(Intent intent) {
 
         setTerminalToolbarView();
 
-        lorieView.refreshOutputProfileDpi(); lorieView.triggerCallback();
+        lorieView.triggerCallback();
 
         filterOutWinKey = prefs.filterOutWinkey.get();
         if (prefs.enableAccessibilityServiceAutomatically.get())
