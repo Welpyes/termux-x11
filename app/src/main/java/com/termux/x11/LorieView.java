@@ -608,7 +608,33 @@ public class LorieView extends SurfaceView implements InputStub {
         updateViewport();
     }
 
-    void getDimensionsFromSettings(int width, int height) {
+    
+    private boolean isDesktopModeOutputProfileActive(android.content.SharedPreferences outputPrefs) {
+        if (!outputPrefs.getBoolean("desktopModeOutputEnabled", false)) {
+            return false;
+        }
+
+        /*
+         * Prefer the actual display this LorieView is attached to.
+         * In Samsung DeX / Android Desktop Mode, the Activity normally runs
+         * on a non-default external display.
+         */
+        try {
+            android.view.Display display = getDisplay();
+            if (display != null && display.getDisplayId() != android.view.Display.DEFAULT_DISPLAY) {
+                return true;
+            }
+        } catch (Throwable ignored) {
+        }
+
+        /*
+         * Fallback to the helper for cases where the view display is not
+         * available yet but the system reports Desktop Mode.
+         */
+        return com.termux.x11.utils.DesktopModeOutputHelper.isDesktopMode(getContext());
+    }
+
+void getDimensionsFromSettings(int width, int height) {
         Prefs prefs = MainActivity.getPrefs();
         int w = width;
         int h = height;
@@ -641,21 +667,25 @@ public class LorieView extends SurfaceView implements InputStub {
         android.content.SharedPreferences outputPrefs =
             android.preference.PreferenceManager.getDefaultSharedPreferences(getContext());
 
-        String desktopModeResolution =
-            com.termux.x11.utils.DesktopModeOutputHelper.resolveDesktopModeResolutionString(
-                getContext(),
-                outputPrefs.getBoolean("desktopModeOutputEnabled", false),
-                outputPrefs.getString("desktopModeResolution", "1920x1080"),
-                w + "x" + h
-            );
+        desktopModeOutputProfileActive = isDesktopModeOutputProfileActive(outputPrefs);
 
-        desktopModeOutputProfileActive = desktopModeResolution != null; if (desktopModeResolution != null) {
-            int[] desktopModeSize =
-                com.termux.x11.utils.DesktopModeOutputHelper.parseResolution(desktopModeResolution);
+        if (desktopModeOutputProfileActive) {
+            String desktopModeResolution =
+                    com.termux.x11.utils.DesktopModeOutputHelper.resolveDesktopModeResolutionString(
+                            getContext(),
+                            true,
+                            outputPrefs.getString("desktopModeResolution", "1920x1080"),
+                            w + "x" + h
+                    );
 
-            if (desktopModeSize != null) {
-                w = desktopModeSize[0];
-                h = desktopModeSize[1];
+            if (desktopModeResolution != null) {
+                int[] desktopModeSize =
+                        com.termux.x11.utils.DesktopModeOutputHelper.parseResolution(desktopModeResolution);
+
+                if (desktopModeSize != null) {
+                    w = desktopModeSize[0];
+                    h = desktopModeSize[1];
+                }
             }
         }
 
@@ -699,7 +729,31 @@ public class LorieView extends SurfaceView implements InputStub {
         int left = availableLeft + (availableW - drawW) / 2;
         int top = availableTop + (availableH - drawH) / 2;
 
-        viewport.set(left, top, left + drawW, top + drawH); android.content.SharedPreferences outputPrefs = android.preference.PreferenceManager.getDefaultSharedPreferences(getContext()); String outputDpiScale = this.desktopModeOutputProfileActive ? outputPrefs.getString("desktopModeDpiScale", "100") : outputPrefs.getString("displayDpiScale", "100"); Log.d("LorieView", "Xft DPI profile=" + (this.desktopModeOutputProfileActive ? "desktop" : "normal") + " scale=" + outputDpiScale); setDpi(com.termux.x11.utils.DesktopModeOutputHelper.resolveX11Dpi( getContext(), false, outputDpiScale, outputDpiScale )); setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.x, p.y);
+        viewport.set(left, top, left + drawW, top + drawH);
+        android.content.SharedPreferences outputPrefs =
+                android.preference.PreferenceManager.getDefaultSharedPreferences(getContext());
+
+        /*
+         * getDimensionsFromSettings() has already selected the active output
+         * profile for this updateViewport() pass.  Xft DPI must follow that
+         * exact same profile.
+         */
+        String outputDpiScale = desktopModeOutputProfileActive
+                ? outputPrefs.getString("desktopModeDpiScale", "100")
+                : outputPrefs.getString("displayDpiScale", "100");
+
+        Log.d("LorieView", "Xft DPI profile="
+                + (desktopModeOutputProfileActive ? "desktop" : "normal")
+                + " scale=" + outputDpiScale);
+
+        setDpi(com.termux.x11.utils.DesktopModeOutputHelper.resolveX11Dpi(
+                getContext(),
+                false,
+                outputDpiScale,
+                outputDpiScale
+        ));
+
+setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.x, p.y);
 
         if (mCallback != null)
             mCallback.changed(availableW, availableH, p.x, p.y);
