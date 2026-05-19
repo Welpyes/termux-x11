@@ -24,12 +24,12 @@
         <item>ud</item>
         <item>at</item>
     </string-array>
-            <string-array name="displayResolutionVariants">
+                    <string-array name="displayResolutionVariants">
         <item>native</item>
         <item>exact</item>
         <item>custom</item>
     </string-array>
-            <string-array name="displayResolution">
+                    <string-array name="displayResolution">
         <item>320x200</item>
         <item>320x240</item>
         <item>400x240</item>
