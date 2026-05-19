@@ -140,22 +140,22 @@
         <item>custom</item>
     </string-array>
     <string-array name="forceOrientationEntryValues">
-        <item>Auto</item>
-        <item>Portrait</item>
-        <item>Landscape</item>
-        <item>Reverse portrait</item>
-        <item>Reverse landscape</item>
+        <item>auto</item>
+        <item>portrait</item>
+        <item>landscape</item>
+        <item>reverse portrait</item>
+        <item>reverse landscape</item>
     </string-array>
     <string-array name="touchModeEntryValues">
-        <item>Trackpad</item>
-        <item>Simulated touchscreen</item>
-        <item>Direct touch</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
     </string-array>
     <string-array name="transformCapturedPointerEntryValues">
-        <item>No</item>
-        <item>Clockwise</item>
-        <item>Counter clockwise</item>
-        <item>Upside down</item>
-        <item>Automatic (for touchpad)</item>
+        <item>no</item>
+        <item>c</item>
+        <item>cc</item>
+        <item>ud</item>
+        <item>at</item>
     </string-array>
 </resources>
