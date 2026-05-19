@@ -65,11 +65,11 @@ E.g. <b>META</b> for <i>META key</i>, \n
     <string name="lorie_pref_transformCapturedPointer">Transform captured pointer movements</string>
     <string name="lorie_pref_capturedPointerSpeedFactor">Captured pointer speed factor, %</string>
   <string name="lorie_pref_capturedMouseDexLikeAcceleration">Use DeX-like acceleration for captured mouse</string>
-  <string name="lorie_pref_capturedMouseDexLikeAcceleration_summary">Apply a velocity-based acceleration curve to hardware mouse movement only on a Samsung DeX display while pointer capture is active.</string>
+  <string name="lorie_pref_capturedMouseDexLikeAcceleration_summary">Apply a velocity-based acceleration curve to hardware mouse movement only on Samsung DeX while pointer capture is active.</string>
   <string name="lorie_pref_capturedMouseSpeedFactor">Captured mouse speed factor, %</string>
-  <string name="lorie_pref_capturedMouseSpeedFactor_summary">Hardware mouse-only speed multiplier used only on a Samsung DeX display while pointer capture is active.</string>
+  <string name="lorie_pref_capturedMouseSpeedFactor_summary">Hardware mouse-only speed multiplier used only on Samsung DeX while pointer capture is active.</string>
   <string name="lorie_pref_capturedMouseAcceleration">Captured mouse acceleration, %</string>
-  <string name="lorie_pref_capturedMouseAcceleration_summary">Extra velocity-based gain for captured hardware mouse movement only on a Samsung DeX display.</string>
+  <string name="lorie_pref_capturedMouseAcceleration_summary">Extra velocity-based gain for captured hardware mouse movement only on Samsung DeX.</string>
     <string name="lorie_pref_tapToMove">Enable tap-to-move for touchpads</string>
 
     <string name="lorie_pref_showAdditionalKbd">Show additional keyboard</string>

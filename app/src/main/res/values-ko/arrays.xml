@@ -17,4 +17,11 @@
         <item>가상 터치스크린</item>
         <item>직접 터치</item>
     </string-array>
+    <string-array name="forceOrientationEntries">
+        <item>자동</item>
+        <item>세로</item>
+        <item>가로</item>
+        <item>세로 반전</item>
+        <item>가로 반전</item>
+    </string-array>
 </resources>

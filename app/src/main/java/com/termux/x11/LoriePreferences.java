@@ -370,7 +370,7 @@ public class LoriePreferences extends AppCompatActivity implements PreferenceFra
                 });
         }
 
-        private void setCapturedMouseOptionsVisible(boolean visible) { setVisible("capturedMouseDexLikeAcceleration", visible); setVisible("capturedMouseSpeedFactor", visible); setVisible("capturedMouseAcceleration", visible); } private void updateCapturedMouseOptionsVisibility() { setCapturedMouseOptionsVisible(prefs.pointerCapture.get()); } private void installPointerCaptureVisibilityListener() { Preference pointerCapturePreference = findPreference("pointerCapture"); if (pointerCapturePreference != null) pointerCapturePreference.setOnPreferenceChangeListener((preference, newValue) -> { setCapturedMouseOptionsVisible(Boolean.TRUE.equals(newValue)); return true; }); } private void setVisible(CharSequence key, boolean value) {
+           private void setCapturedMouseOptionsVisible(boolean visible) { setVisible("capturedMouseDexLikeAcceleration", visible); setVisible("capturedMouseSpeedFactor", visible); setVisible("capturedMouseAcceleration", visible); } private void updateCapturedMouseOptionsVisibility() { setCapturedMouseOptionsVisible(prefs.pointerCapture.get()); } private void installPointerCaptureVisibilityListener() { Preference pointerCapturePreference = findPreference("pointerCapture"); if (pointerCapturePreference != null) pointerCapturePreference.setOnPreferenceChangeListener((preference, newValue) -> { setCapturedMouseOptionsVisible(Boolean.TRUE.equals(newValue)); return true; }); } private void setVisible(CharSequence key, boolean value) {
             Preference p = findPreference(key);
             if (p != null)
                 p.setVisible(value);

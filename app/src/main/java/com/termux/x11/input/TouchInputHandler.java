@@ -909,7 +909,11 @@ public class TouchInputHandler {
                 if (isMouseButtonChanged(button[0]))
                     mInjector.sendMouseEvent(null, button[1], mouseButtonDown(button[0]), true);
             savedBS = currentBS; return true; } private boolean useDexCapturedMouseProfile() {
-                return com.termux.x11.utils.SamsungDexUtils.checkDeXEnabled(mActivity);
+                if (com.termux.x11.utils.SamsungDexUtils.checkDeXEnabled(mActivity))
+                    return true;
+
+                android.view.Display display = mActivity.getLorieView().getDisplay();
+                return display != null && display.getDisplayId() != android.view.Display.DEFAULT_DISPLAY;
             }
 
             private float clampFloat(float value, float min, float max) {

@@ -134,4 +134,28 @@
         <item>Reverse portrait</item>
         <item>Reverse landscape</item>
     </string-array>
+    <string-array name="displayResolutionModeEntryValues">
+        <item>native</item>
+        <item>exact</item>
+        <item>custom</item>
+    </string-array>
+    <string-array name="forceOrientationEntryValues">
+        <item>Auto</item>
+        <item>Portrait</item>
+        <item>Landscape</item>
+        <item>Reverse portrait</item>
+        <item>Reverse landscape</item>
+    </string-array>
+    <string-array name="touchModeEntryValues">
+        <item>Trackpad</item>
+        <item>Simulated touchscreen</item>
+        <item>Direct touch</item>
+    </string-array>
+    <string-array name="transformCapturedPointerEntryValues">
+        <item>No</item>
+        <item>Clockwise</item>
+        <item>Counter clockwise</item>
+        <item>Upside down</item>
+        <item>Automatic (for touchpad)</item>
+    </string-array>
 </resources>
