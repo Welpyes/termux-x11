@@ -846,16 +846,11 @@ setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.
                     .getString("displayFilteringMode", "nearest");
         setFiltering("nearest".equals(filtering) ? GLES20.GL_NEAREST : GLES20.GL_LINEAR);
 setRendererPerfLogEnabled(p.get().getBoolean("rendererPerfLog", false));
-
     String rendererOutputMode = p.get().getString("rendererOutputMode", "compat");
-
-    // Failed pacing/skip experiments are intentionally disabled.
-    setSwapBackpressureGuardEnabled(false);
-    setFramePacingThrottleEnabled(false);
 
     if ("gaming_fast".equals(rendererOutputMode)) {
         setSmoothPresentationEnabled(false);
-        setPostSwapTouchEnabled(true);
+        setPostSwapTouchEnabled(false);
         setPostSwapFenceWaitEnabled(false);
         setRootFenceWaitEnabled(false);
     } else {
@@ -865,7 +860,12 @@ setRendererPerfLogEnabled(p.get().getBoolean("rendererPerfLog", false));
         setRootFenceWaitEnabled(true);
     }
 
-// The old individual experimental switches are intentionally ignored here.
+
+
+    if ("gaming_fast".equals(rendererOutputMode)) {
+    } else {
+    }
+
     // Keep swap backpressure guard disabled because it caused repeated busy skips.
 if ("gaming_fast".equals(rendererOutputMode)) {
 } else if ("gaming_paced".equals(rendererOutputMode)) {
@@ -974,8 +974,6 @@ hardwareKbdScancodesWorkaround = p.hardwareKbdScancodesWorkaround.get();
 @FastNative private native void setPostSwapTouchEnabled(boolean enabled);
 @FastNative private native void setPostSwapFenceWaitEnabled(boolean enabled);
 @FastNative private native void setRootFenceWaitEnabled(boolean enabled);
-@FastNative private native void setSwapBackpressureGuardEnabled(boolean enabled);
-@FastNative private native void setFramePacingThrottleEnabled(boolean enabled);
     @FastNative static native void connect(int fd);
     @CriticalNative static native boolean connected();
     @FastNative static native void startLogcat(int fd);
