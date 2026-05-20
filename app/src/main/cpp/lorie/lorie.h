@@ -41,6 +41,7 @@ __unused void rendererSetFiltering(JNIEnv* env, jobject self, jint filtering);
 __unused void rendererSetSmoothPresentationEnabled(JNIEnv* env, jobject self, jboolean enabled);
 __unused void rendererSetPerfLogEnabled(JNIEnv* env, jobject self, jboolean enabled);
 __unused void rendererSetPostSwapTouchEnabled(JNIEnv* env, jobject self, jboolean enabled);
+__unused void rendererSetPostSwapFenceWaitEnabled(JNIEnv* env, jobject self, jboolean enabled);
 __unused void rendererSetRootFenceWaitEnabled(JNIEnv* env, jobject self, jboolean enabled);
 __unused void rendererSetSwapBackpressureGuardEnabled(JNIEnv* env, jobject self, jboolean enabled);
 __unused void rendererSetFramePacingThrottleEnabled(JNIEnv* env, jobject self, jboolean enabled);
