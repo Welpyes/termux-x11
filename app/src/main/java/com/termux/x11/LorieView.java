@@ -845,7 +845,8 @@ setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.
                     .getDefaultSharedPreferences(getContext())
                     .getString("displayFilteringMode", "nearest");
         setFiltering("nearest".equals(filtering) ? GLES20.GL_NEAREST : GLES20.GL_LINEAR); setSmoothPresentationEnabled(p.get().getBoolean("smoothPresentation", false)); setRendererPerfLogEnabled(p.get().getBoolean("rendererPerfLog", false)); setPostSwapTouchEnabled(p.get().getBoolean("rendererPostSwapTouch", true)); setRootFenceWaitEnabled(p.get().getBoolean("rendererRootFenceWait", true));
-        hardwareKbdScancodesWorkaround = p.hardwareKbdScancodesWorkaround.get();
+        setSwapBackpressureGuardEnabled(p.get().getBoolean("rendererSwapBackpressureGuard", false));
+    hardwareKbdScancodesWorkaround = p.hardwareKbdScancodesWorkaround.get();
         clipboardSyncEnabled = p.clipboardEnable.get();
         setClipboardSyncEnabled(clipboardSyncEnabled, clipboardSyncEnabled);
         TouchInputHandler.refreshInputDevices();
@@ -946,6 +947,7 @@ setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.
 @FastNative private native void setRendererPerfLogEnabled(boolean enabled);
 @FastNative private native void setPostSwapTouchEnabled(boolean enabled);
 @FastNative private native void setRootFenceWaitEnabled(boolean enabled);
+@FastNative private native void setSwapBackpressureGuardEnabled(boolean enabled);
     @FastNative static native void connect(int fd);
     @CriticalNative static native boolean connected();
     @FastNative static native void startLogcat(int fd);

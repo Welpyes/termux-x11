@@ -68,6 +68,12 @@
     app:summary="@string/lorie_pref_rendererRootFenceWait_summary"
     app:defaultValue="true" />
 
+<SwitchPreferenceCompat
+    app:key="rendererSwapBackpressureGuard"
+    app:title="@string/lorie_pref_rendererSwapBackpressureGuard"
+    app:summary="@string/lorie_pref_rendererSwapBackpressureGuard_summary"
+    app:defaultValue="false" />
+
 <SwitchPreferenceCompat app:key="adjustResolution" app:defaultValue="false" />
         <SwitchPreferenceCompat app:key="displayStretch" app:defaultValue="false" />
         <SwitchPreferenceCompat app:key="Reseed" app:defaultValue="true" />

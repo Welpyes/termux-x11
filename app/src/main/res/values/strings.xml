@@ -143,4 +143,7 @@ E.g. <b>META</b> for <i>META key</i>, \n
 
     <string name="lorie_pref_rendererRootFenceWait">Root draw fence wait (experimental)</string>
     <string name="lorie_pref_rendererRootFenceWait_summary">Keeps the existing wait for root window drawing to finish before presenting. Turn this off only for frame pacing tests; it may cause flicker, tearing, or visual artifacts.</string>
+
+    <string name="lorie_pref_rendererSwapBackpressureGuard">Swap backpressure guard (experimental)</string>
+    <string name="lorie_pref_rendererSwapBackpressureGuard_summary">Skips one output frame after a slow Android surface swap to reduce repeated frame pacing spikes. Test this with gaming fast output mode.</string>
 </resources>
