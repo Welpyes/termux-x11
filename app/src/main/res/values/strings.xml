@@ -146,4 +146,17 @@ E.g. <b>META</b> for <i>META key</i>, \n
 
     <string name="lorie_pref_rendererSwapBackpressureGuard">Swap backpressure guard (experimental)</string>
     <string name="lorie_pref_rendererSwapBackpressureGuard_summary">Skips one output frame after a slow Android surface swap to reduce repeated frame pacing spikes. Test this with gaming fast output mode.</string>
+
+    <string name="lorie_pref_rendererOutputMode">Renderer output mode (experimental)</string>
+    <string name="lorie_pref_rendererOutputMode_summary">Choose compatibility-first output, fast gaming output, or paced gaming output. Gaming modes are experimental for high-resolution Vulkan/OpenGL apps.</string>
+    <string-array name="lorie_pref_rendererOutputMode_entries">
+        <item>Compatibility first</item>
+        <item>Gaming fast output</item>
+        <item>Gaming paced output</item>
+    </string-array>
+    <string-array name="lorie_pref_rendererOutputMode_values">
+        <item>compat</item>
+        <item>gaming_fast</item>
+        <item>gaming_paced</item>
+    </string-array>
 </resources>

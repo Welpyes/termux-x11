@@ -844,9 +844,33 @@ setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.
                 android.preference.PreferenceManager
                     .getDefaultSharedPreferences(getContext())
                     .getString("displayFilteringMode", "nearest");
-        setFiltering("nearest".equals(filtering) ? GLES20.GL_NEAREST : GLES20.GL_LINEAR); setSmoothPresentationEnabled(p.get().getBoolean("smoothPresentation", false)); setRendererPerfLogEnabled(p.get().getBoolean("rendererPerfLog", false)); setPostSwapTouchEnabled(p.get().getBoolean("rendererPostSwapTouch", true)); setRootFenceWaitEnabled(p.get().getBoolean("rendererRootFenceWait", true));
-        setSwapBackpressureGuardEnabled(p.get().getBoolean("rendererSwapBackpressureGuard", false));
-    hardwareKbdScancodesWorkaround = p.hardwareKbdScancodesWorkaround.get();
+        setFiltering("nearest".equals(filtering) ? GLES20.GL_NEAREST : GLES20.GL_LINEAR);
+setRendererPerfLogEnabled(p.get().getBoolean("rendererPerfLog", false));
+
+    String rendererOutputMode = p.get().getString("rendererOutputMode", "compat");
+
+    // The old individual experimental switches are intentionally ignored here.
+    // Keep swap backpressure guard disabled because it caused repeated busy skips.
+    setSwapBackpressureGuardEnabled(false);
+
+    if ("gaming_fast".equals(rendererOutputMode)) {
+        setSmoothPresentationEnabled(false);
+        setPostSwapTouchEnabled(false);
+        setRootFenceWaitEnabled(false);
+        setFramePacingThrottleEnabled(false);
+    } else if ("gaming_paced".equals(rendererOutputMode)) {
+        setSmoothPresentationEnabled(false);
+        setPostSwapTouchEnabled(false);
+        setRootFenceWaitEnabled(false);
+        setFramePacingThrottleEnabled(true);
+    } else {
+        setSmoothPresentationEnabled(false);
+        setPostSwapTouchEnabled(true);
+        setRootFenceWaitEnabled(true);
+        setFramePacingThrottleEnabled(false);
+    }
+
+hardwareKbdScancodesWorkaround = p.hardwareKbdScancodesWorkaround.get();
         clipboardSyncEnabled = p.clipboardEnable.get();
         setClipboardSyncEnabled(clipboardSyncEnabled, clipboardSyncEnabled);
         TouchInputHandler.refreshInputDevices();
@@ -948,6 +972,7 @@ setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.
 @FastNative private native void setPostSwapTouchEnabled(boolean enabled);
 @FastNative private native void setRootFenceWaitEnabled(boolean enabled);
 @FastNative private native void setSwapBackpressureGuardEnabled(boolean enabled);
+@FastNative private native void setFramePacingThrottleEnabled(boolean enabled);
     @FastNative static native void connect(int fd);
     @CriticalNative static native boolean connected();
     @FastNative static native void startLogcat(int fd);

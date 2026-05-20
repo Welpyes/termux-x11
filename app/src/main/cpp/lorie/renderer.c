@@ -135,6 +135,11 @@ static volatile bool rendererPerfLogEnabled = false;
 static volatile bool rendererPostSwapTouchEnabled = true;
 static volatile bool rendererRootFenceWaitEnabled = true;
 static volatile bool rendererSwapBackpressureGuardEnabled = false;
+static volatile bool rendererFramePacingThrottleEnabled = false;
+static int64_t rendererLastPresentNs = 0;
+static int64_t rendererFramePacingSleepUs = 0;
+static const int64_t rendererTargetFrameIntervalNs = 16666667LL;
+static const int64_t rendererFramePacingMaxSleepNs = 8000000LL;
 static volatile bool rendererSkipNextFrame = false;
 static int64_t rendererLastSwapUs = 0;
 static const int64_t rendererSwapBackpressureThresholdUs = 12000;
@@ -152,6 +157,40 @@ static int64_t rendererNowNs(void) {
 static inline int64_t rendererNsToUs(int64_t ns) {
     return ns / 1000LL;
 }
+
+static void rendererSleepNs(int64_t ns) {
+    if (ns <= 0)
+        return;
+
+    struct timespec ts;
+    ts.tv_sec = ns / 1000000000LL;
+    ts.tv_nsec = ns % 1000000000LL;
+    nanosleep(&ts, NULL);
+}
+
+static void rendererApplyFramePacing(void) {
+    rendererFramePacingSleepUs = 0;
+
+    if (!rendererFramePacingThrottleEnabled)
+        return;
+
+    if (rendererLastPresentNs == 0)
+        return;
+
+    int64_t nowNs = rendererNowNs();
+    int64_t elapsedNs = nowNs - rendererLastPresentNs;
+    int64_t sleepNs = rendererTargetFrameIntervalNs - elapsedNs;
+
+    if (sleepNs <= 0)
+        return;
+
+    if (sleepNs > rendererFramePacingMaxSleepNs)
+        sleepNs = rendererFramePacingMaxSleepNs;
+
+    rendererFramePacingSleepUs = rendererNsToUs(sleepNs);
+    rendererSleepNs(sleepNs);
+}
+
 
 static EGLint rendererGetSwapInterval(void) {
     return smoothPresentationEnabled ? 1 : 0;
@@ -364,6 +403,16 @@ void rendererSetSwapBackpressureGuardEnabled(JNIEnv* env, jobject self, jboolean
     rendererSkipNextFrame = false;
     rendererLastSwapUs = 0;
 }
+
+void rendererSetFramePacingThrottleEnabled(JNIEnv* env, jobject self, jboolean enabled) {
+    (void) env;
+    (void) self;
+
+    rendererFramePacingThrottleEnabled = enabled == JNI_TRUE;
+    rendererLastPresentNs = 0;
+    rendererFramePacingSleepUs = 0;
+}
+
 
 
 
@@ -712,10 +761,10 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
     state->waitForNextFrame = true;
     lorie_mutex_unlock(&state->lock, &state->lockingPid);
 
-    if (rendererPerfLogEnabled || rendererSwapBackpressureGuardEnabled) { int64_t swapStartNs = rendererNowNs(); if (eglSwapBuffers(egl_display, sfc) != EGL_TRUE) printEglError("Failed to swap buffers", __LINE__); swapUs = rendererNsToUs(rendererNowNs() - swapStartNs); rendererLastSwapUs = swapUs; if (rendererSwapBackpressureGuardEnabled && swapUs >= rendererSwapBackpressureThresholdUs) rendererSkipNextFrame = true; } else { if (eglSwapBuffers(egl_display, sfc) != EGL_TRUE) printEglError("Failed to swap buffers", __LINE__); }
+    if (rendererFramePacingThrottleEnabled) rendererApplyFramePacing(); if (rendererPerfLogEnabled || rendererSwapBackpressureGuardEnabled || rendererFramePacingThrottleEnabled) { int64_t swapStartNs = rendererNowNs(); if (eglSwapBuffers(egl_display, sfc) != EGL_TRUE) printEglError("Failed to swap buffers", __LINE__); swapUs = rendererNsToUs(rendererNowNs() - swapStartNs); rendererLastSwapUs = swapUs; if (rendererSwapBackpressureGuardEnabled && swapUs >= rendererSwapBackpressureThresholdUs) rendererSkipNextFrame = true; } else { if (eglSwapBuffers(egl_display, sfc) != EGL_TRUE) printEglError("Failed to swap buffers", __LINE__); }
 
     // Perform a little drawing operation to make sure the next buffer is ready on the next invocation of drawing
-    if (rendererPostSwapTouchEnabled) { glEnable(GL_SCISSOR_TEST); glScissor(0, 0, 1, 1); glClearColor(0, 0, 0, 0); glClear(GL_COLOR_BUFFER_BIT); glDisable(GL_SCISSOR_TEST); fence = eglCreateSyncKHR(egl_display, EGL_SYNC_FENCE_KHR, NULL); if (rendererPerfLogEnabled) { int64_t postSwapStartNs = rendererNowNs(); eglClientWaitSyncKHR(egl_display, fence, EGL_SYNC_FLUSH_COMMANDS_BIT_KHR, EGL_FOREVER); postSwapWaitUs = rendererNsToUs(rendererNowNs() - postSwapStartNs); } else { eglClientWaitSyncKHR(egl_display, fence, EGL_SYNC_FLUSH_COMMANDS_BIT_KHR, EGL_FOREVER); } eglDestroySyncKHR(egl_display, fence); } state->renderedFrames++; if (rendererPerfLogEnabled) { int64_t totalUs = rendererNsToUs(rendererNowNs() - frameStartNs); rendererPerfFrameNo++; if ((rendererPerfFrameNo % 60) == 0 || totalUs > 20000 || swapUs > 12000) log("XloriePerf: frame=%llu mode=%s root_fence_wait=%d post_swap_touch=%d swap_guard=%d frame_delta_us=%lld root_wait_us=%lld swap_us=%lld post_swap_wait_us=%lld total_us=%lld", (unsigned long long) rendererPerfFrameNo, rendererGetPresentModeName(), rendererRootFenceWaitEnabled ? 1 : 0, rendererPostSwapTouchEnabled ? 1 : 0, rendererSwapBackpressureGuardEnabled ? 1 : 0, (long long) frameDeltaUs, (long long) rootWaitUs, (long long) swapUs, (long long) postSwapWaitUs, (long long) totalUs); }
+    rendererLastPresentNs = rendererNowNs(); if (rendererPostSwapTouchEnabled) { glEnable(GL_SCISSOR_TEST); glScissor(0, 0, 1, 1); glClearColor(0, 0, 0, 0); glClear(GL_COLOR_BUFFER_BIT); glDisable(GL_SCISSOR_TEST); fence = eglCreateSyncKHR(egl_display, EGL_SYNC_FENCE_KHR, NULL); if (rendererPerfLogEnabled) { int64_t postSwapStartNs = rendererNowNs(); eglClientWaitSyncKHR(egl_display, fence, EGL_SYNC_FLUSH_COMMANDS_BIT_KHR, EGL_FOREVER); postSwapWaitUs = rendererNsToUs(rendererNowNs() - postSwapStartNs); } else { eglClientWaitSyncKHR(egl_display, fence, EGL_SYNC_FLUSH_COMMANDS_BIT_KHR, EGL_FOREVER); } eglDestroySyncKHR(egl_display, fence); } state->renderedFrames++; if (rendererPerfLogEnabled) { int64_t totalUs = rendererNsToUs(rendererNowNs() - frameStartNs); rendererPerfFrameNo++; if ((rendererPerfFrameNo % 60) == 0 || totalUs > 20000 || swapUs > 12000) log("XloriePerf: frame=%llu mode=%s root_fence_wait=%d post_swap_touch=%d swap_guard=%d pacing=%d pacing_sleep_us=%lld frame_delta_us=%lld root_wait_us=%lld swap_us=%lld post_swap_wait_us=%lld total_us=%lld", (unsigned long long) rendererPerfFrameNo, rendererGetPresentModeName(), rendererRootFenceWaitEnabled ? 1 : 0, rendererPostSwapTouchEnabled ? 1 : 0, rendererSwapBackpressureGuardEnabled ? 1 : 0, rendererFramePacingThrottleEnabled ? 1 : 0, (long long) rendererFramePacingSleepUs, (long long) frameDeltaUs, (long long) rootWaitUs, (long long) swapUs, (long long) postSwapWaitUs, (long long) totalUs); }
 }
 
 static inline __always_inline bool rendererShouldWait(bool *waitingForBuffers) {
