@@ -137,4 +137,7 @@ E.g. <b>META</b> for <i>META key</i>, \n
     <string name="lorie_pref_smoothPresentation_summary">Synchronizes Android surface presentation with the display to reduce visible stutter. May limit maximum FPS or benchmark scores in some apps.</string>
     <string name="lorie_pref_rendererPerfLog">Renderer performance log</string>
     <string name="lorie_pref_rendererPerfLog_summary">Writes renderer fence, swap, and frame timing diagnostics to logcat. Keep this off unless you are testing performance.</string>
+
+    <string name="lorie_pref_rendererPostSwapTouch">Post-swap touch and fence wait (experimental)</string>
+    <string name="lorie_pref_rendererPostSwapTouch_summary">Keeps the existing 1x1 post-swap draw and fence wait. Turn this off only for frame pacing tests if smooth presentation still stutters.</string>
 </resources>
