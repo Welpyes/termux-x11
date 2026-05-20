@@ -391,6 +391,8 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, __unused void *reserved) {
             {"setDpi", "(I)V", (void *) &setDpi},
         {"setViewport", "(IIIIII)V", (void *)&rendererSetViewport},
             {"setFiltering", "(I)V", (void *)&rendererSetFiltering},
+{"setSmoothPresentationEnabled", "(Z)V", (void *)&rendererSetSmoothPresentationEnabled},
+{"setRendererPerfLogEnabled", "(Z)V", (void *)&rendererSetPerfLogEnabled},
             {"connect", "(I)V", (void *)&connect_},
             {"connected", "()Z", (void *)&connected},
             {"startLogcat", "(I)V", (void *)&startLogcat},

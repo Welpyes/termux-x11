@@ -123,4 +123,9 @@
     <string name="lorie_notification_release_pointer_and_keyboard_capture">캡처 해제</string>
     <string name="lorie_notification_toggle_fullscreen">전체화면 전환</string>
     <string name="lorie_pref_desktopModeResolution_summary">외부 디스플레이/DeX 데스크탑 모드에서 사용할 해상도를 선택합니다.</string>
+
+    <string name="lorie_pref_smoothPresentation">부드러운 화면 출력 모드 (실험실)</string>
+    <string name="lorie_pref_smoothPresentation_summary">Android 화면 표시 타이밍에 맞춰 출력하여 눈에 보이는 끊김을 줄입니다. 일부 앱에서는 최대 FPS 또는 벤치마크 점수가 낮아질 수 있습니다.</string>
+    <string name="lorie_pref_rendererPerfLog">렌더러 성능 로그</string>
+    <string name="lorie_pref_rendererPerfLog_summary">렌더러의 fence, swap, 프레임 타이밍 진단 정보를 logcat에 기록합니다. 성능 테스트 중일 때만 켜세요.</string>
 </resources>

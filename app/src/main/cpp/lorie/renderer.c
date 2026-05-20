@@ -21,6 +21,7 @@
 #include <media/NdkImageReader.h>
 #include <dlfcn.h>
 #include <sys/mman.h>
+#include <time.h>
 #include "list.h"
 #include "lorie.h"
 
@@ -128,6 +129,48 @@ static pthread_mutex_t stateLock;
 static pthread_cond_t stateCond;
 static pthread_cond_t stateChangeFinishCond;
 static pthread_spinlock_t bufferLock;
+
+static volatile bool smoothPresentationEnabled = false;
+static volatile bool rendererPerfLogEnabled = false;
+static volatile bool presentModeChanged = false;
+static volatile bool rendererOptionsReady = false;
+static uint64_t rendererPerfFrameNo = 0;
+
+static int64_t rendererNowNs(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ((int64_t) ts.tv_sec * 1000000000LL) + ts.tv_nsec;
+}
+
+static inline int64_t rendererNsToUs(int64_t ns) {
+    return ns / 1000LL;
+}
+
+static EGLint rendererGetSwapInterval(void) {
+    return smoothPresentationEnabled ? 1 : 0;
+}
+
+static const char *rendererGetPresentModeName(void) {
+    return smoothPresentationEnabled ? "smooth" : "immediate";
+}
+
+static void rendererApplyPresentMode(void) {
+    EGLint interval;
+
+    if (egl_display == EGL_NO_DISPLAY)
+        return;
+
+    interval = rendererGetSwapInterval();
+
+    if (eglSwapInterval(egl_display, interval) != EGL_TRUE) {
+        printEglError("eglSwapInterval failed", __LINE__);
+        return;
+    }
+
+    log("Xlorie: present mode=%s swap_interval=%d\n",
+        rendererGetPresentModeName(), interval);
+}
+
 static volatile struct lorie_shared_server_state* state = NULL;
 static struct {
     GLuint id;
@@ -228,7 +271,7 @@ int rendererInitThread(void) {
     sfc = defaultSfc = eglCreateWindowSurface(egl_display, cfg, win, NULL);
 
     eglMakeCurrent(egl_display, sfc, sfc, ctx);
-    eglSwapInterval(egl_display, 0);
+    rendererApplyPresentMode();
 
     g_texture_program = createProgram(vertexShaderSrc, fragmentShaderSrc);
     if (!g_texture_program)
@@ -264,11 +307,34 @@ void rendererInit(JNIEnv* env) {
     pthread_cond_init(&stateChangeFinishCond, NULL);
     pthread_spin_init(&bufferLock, false);
 
-    pthread_create(&t, NULL, (void*(*)(void*)) rendererInitThread, NULL);
+    rendererOptionsReady = true; pthread_create(&t, NULL, (void*(*)(void*)) rendererInitThread, NULL);
 }
 void rendererSetFiltering(JNIEnv* env, jobject self, jint f) {
     filtering = f;
 }
+
+void rendererSetSmoothPresentationEnabled(JNIEnv* env, jobject self, jboolean enabled) {
+    (void) env;
+    (void) self;
+
+    smoothPresentationEnabled = enabled == JNI_TRUE;
+
+    if (!rendererOptionsReady)
+        return;
+
+    pthread_mutex_lock(&stateLock);
+    presentModeChanged = true;
+    pthread_cond_signal(&stateCond);
+    pthread_mutex_unlock(&stateLock);
+}
+
+void rendererSetPerfLogEnabled(JNIEnv* env, jobject self, jboolean enabled) {
+    (void) env;
+    (void) self;
+
+    rendererPerfLogEnabled = enabled == JNI_TRUE;
+}
+
 
 void rendererTestCapabilities(int* legacy_drawing) {
     // Some devices do not support sampling from HAL_PIXEL_FORMAT_BGRA_8888, here we are checking it.
@@ -521,7 +587,7 @@ void rendererRefreshContext(void) {
         return vprintEglError("eglMakeCurrent failed", __LINE__);
     }
 
-    eglSwapInterval(egl_display, 0);
+    rendererApplyPresentMode();
 
     // We should redraw image at least once right after surface change
     if (state)
@@ -537,7 +603,7 @@ static void drawCursor(float displayWidth, float displayHeight);
 void rendererRedrawLocked(bool* waitingForBuffers) {
     float xfactor = 1.f;
     LorieBuffer_Desc *desc = NULL;
-    EGLSync fence;
+    EGLSync fence; int64_t frameStartNs = rendererPerfLogEnabled ? rendererNowNs() : 0; int64_t rootWaitUs = 0; int64_t swapUs = 0; int64_t postSwapWaitUs = 0;
     // The buffer will not be released until this function ends, but main thread can modify buffer list
     pthread_spin_lock(&bufferLock);
     LorieBuffer *buffer = LorieBufferList_findById(&buffers, state->rootWindowTextureID);
@@ -609,14 +675,11 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
     drawCursor((float) (LorieBuffer_getWidth(buffer)), (float) (LorieBuffer_getHeight(buffer)));
     glFlush();
 
-    // Wait until root window drawing is finished before giving control back to X server
-    eglClientWaitSyncKHR(egl_display, fence, 0, EGL_FOREVER);
-    eglDestroySyncKHR(egl_display, fence);
+    /* Wait until root window drawing is finished before giving control back to X server. */ if (rendererPerfLogEnabled) { int64_t waitStartNs = rendererNowNs(); eglClientWaitSyncKHR(egl_display, fence, 0, EGL_FOREVER); rootWaitUs = rendererNsToUs(rendererNowNs() - waitStartNs); } else { eglClientWaitSyncKHR(egl_display, fence, 0, EGL_FOREVER); } eglDestroySyncKHR(egl_display, fence);
     state->waitForNextFrame = true;
     lorie_mutex_unlock(&state->lock, &state->lockingPid);
 
-    if (eglSwapBuffers(egl_display, sfc) != EGL_TRUE)
-        printEglError("Failed to swap buffers", __LINE__);
+    if (rendererPerfLogEnabled) { int64_t swapStartNs = rendererNowNs(); if (eglSwapBuffers(egl_display, sfc) != EGL_TRUE) printEglError("Failed to swap buffers", __LINE__); swapUs = rendererNsToUs(rendererNowNs() - swapStartNs); } else { if (eglSwapBuffers(egl_display, sfc) != EGL_TRUE) printEglError("Failed to swap buffers", __LINE__); }
 
     // Perform a little drawing operation to make sure the next buffer is ready on the next invocation of drawing
     glEnable(GL_SCISSOR_TEST);
@@ -624,11 +687,7 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
     glClearColor(0, 0, 0, 0);
     glClear(GL_COLOR_BUFFER_BIT);
     glDisable(GL_SCISSOR_TEST);
-    fence = eglCreateSyncKHR(egl_display, EGL_SYNC_FENCE_KHR, NULL);
-    eglClientWaitSyncKHR(egl_display, fence, EGL_SYNC_FLUSH_COMMANDS_BIT_KHR, EGL_FOREVER);
-    eglDestroySyncKHR(egl_display, fence);
-
-    state->renderedFrames++;
+    fence = eglCreateSyncKHR(egl_display, EGL_SYNC_FENCE_KHR, NULL); if (rendererPerfLogEnabled) { int64_t postSwapStartNs = rendererNowNs(); eglClientWaitSyncKHR(egl_display, fence, EGL_SYNC_FLUSH_COMMANDS_BIT_KHR, EGL_FOREVER); postSwapWaitUs = rendererNsToUs(rendererNowNs() - postSwapStartNs); } else { eglClientWaitSyncKHR(egl_display, fence, EGL_SYNC_FLUSH_COMMANDS_BIT_KHR, EGL_FOREVER); } eglDestroySyncKHR(egl_display, fence); state->renderedFrames++; if (rendererPerfLogEnabled) { int64_t totalUs = rendererNsToUs(rendererNowNs() - frameStartNs); rendererPerfFrameNo++; if ((rendererPerfFrameNo % 60) == 0 || totalUs > 20000 || swapUs > 12000) log("XloriePerf: frame=%llu mode=%s root_wait_us=%lld swap_us=%lld post_swap_wait_us=%lld total_us=%lld\\n", (unsigned long long) rendererPerfFrameNo, rendererGetPresentModeName(), (long long) rootWaitUs, (long long) swapUs, (long long) postSwapWaitUs, (long long) totalUs); }
 }
 
 static inline __always_inline bool rendererShouldWait(bool *waitingForBuffers) {
@@ -690,10 +749,7 @@ __noreturn static void* rendererThread(void) {
                 munmap(oldState, sizeof(*oldState));
         }
 
-        if (windowChanged)
-            rendererRefreshContext();
-
-        // Attach all pending buffers to GL.
+        if (windowChanged) rendererRefreshContext(); if (presentModeChanged) { presentModeChanged = false; rendererApplyPresentMode(); } // Attach all pending buffers to GL.
         pthread_spin_lock(&bufferLock);
         while((buf = LorieBufferList_first(&addedBuffers))) {
             LorieBuffer_attachToGL(buf);

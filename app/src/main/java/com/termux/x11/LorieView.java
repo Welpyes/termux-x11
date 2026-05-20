@@ -844,7 +844,7 @@ setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.
                 android.preference.PreferenceManager
                     .getDefaultSharedPreferences(getContext())
                     .getString("displayFilteringMode", "nearest");
-        setFiltering("nearest".equals(filtering) ? GLES20.GL_NEAREST : GLES20.GL_LINEAR);
+        setFiltering("nearest".equals(filtering) ? GLES20.GL_NEAREST : GLES20.GL_LINEAR); setSmoothPresentationEnabled(p.get().getBoolean("smoothPresentation", false)); setRendererPerfLogEnabled(p.get().getBoolean("rendererPerfLog", false));
         hardwareKbdScancodesWorkaround = p.hardwareKbdScancodesWorkaround.get();
         clipboardSyncEnabled = p.clipboardEnable.get();
         setClipboardSyncEnabled(clipboardSyncEnabled, clipboardSyncEnabled);
@@ -942,6 +942,8 @@ setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.
     @FastNative private native void nativeInit();
     @FastNative private native void surfaceChanged(Surface surface);
     @FastNative private native void setFiltering(int filtering);
+@FastNative private native void setSmoothPresentationEnabled(boolean enabled);
+@FastNative private native void setRendererPerfLogEnabled(boolean enabled);
     @FastNative static native void connect(int fd);
     @CriticalNative static native boolean connected();
     @FastNative static native void startLogcat(int fd);
