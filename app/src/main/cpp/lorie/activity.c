@@ -394,6 +394,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, __unused void *reserved) {
 {"setSmoothPresentationEnabled", "(Z)V", (void *)&rendererSetSmoothPresentationEnabled},
 {"setRendererPerfLogEnabled", "(Z)V", (void *)&rendererSetPerfLogEnabled},
 {"setPostSwapTouchEnabled", "(Z)V", (void *)&rendererSetPostSwapTouchEnabled},
+{"setRootFenceWaitEnabled", "(Z)V", (void *)&rendererSetRootFenceWaitEnabled},
             {"connect", "(I)V", (void *)&connect_},
             {"connected", "()Z", (void *)&connected},
             {"startLogcat", "(I)V", (void *)&startLogcat},

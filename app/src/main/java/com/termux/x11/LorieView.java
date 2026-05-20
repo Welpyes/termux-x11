@@ -608,8 +608,8 @@ public class LorieView extends SurfaceView implements InputStub {
         updateViewport();
     }
 
-    
-    
+
+
     public void refreshOutputProfileDpi() {
         android.content.SharedPreferences outputPrefs =
                 android.preference.PreferenceManager.getDefaultSharedPreferences(getContext());
@@ -844,7 +844,7 @@ setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.
                 android.preference.PreferenceManager
                     .getDefaultSharedPreferences(getContext())
                     .getString("displayFilteringMode", "nearest");
-        setFiltering("nearest".equals(filtering) ? GLES20.GL_NEAREST : GLES20.GL_LINEAR); setSmoothPresentationEnabled(p.get().getBoolean("smoothPresentation", false)); setRendererPerfLogEnabled(p.get().getBoolean("rendererPerfLog", false)); setPostSwapTouchEnabled(p.get().getBoolean("rendererPostSwapTouch", true));
+        setFiltering("nearest".equals(filtering) ? GLES20.GL_NEAREST : GLES20.GL_LINEAR); setSmoothPresentationEnabled(p.get().getBoolean("smoothPresentation", false)); setRendererPerfLogEnabled(p.get().getBoolean("rendererPerfLog", false)); setPostSwapTouchEnabled(p.get().getBoolean("rendererPostSwapTouch", true)); setRootFenceWaitEnabled(p.get().getBoolean("rendererRootFenceWait", true));
         hardwareKbdScancodesWorkaround = p.hardwareKbdScancodesWorkaround.get();
         clipboardSyncEnabled = p.clipboardEnable.get();
         setClipboardSyncEnabled(clipboardSyncEnabled, clipboardSyncEnabled);
@@ -945,6 +945,7 @@ setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.
 @FastNative private native void setSmoothPresentationEnabled(boolean enabled);
 @FastNative private native void setRendererPerfLogEnabled(boolean enabled);
 @FastNative private native void setPostSwapTouchEnabled(boolean enabled);
+@FastNative private native void setRootFenceWaitEnabled(boolean enabled);
     @FastNative static native void connect(int fd);
     @CriticalNative static native boolean connected();
     @FastNative static native void startLogcat(int fd);

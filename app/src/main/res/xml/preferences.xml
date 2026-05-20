@@ -62,6 +62,12 @@
     app:summary="@string/lorie_pref_rendererPostSwapTouch_summary"
     app:defaultValue="true" />
 
+<SwitchPreferenceCompat
+    app:key="rendererRootFenceWait"
+    app:title="@string/lorie_pref_rendererRootFenceWait"
+    app:summary="@string/lorie_pref_rendererRootFenceWait_summary"
+    app:defaultValue="true" />
+
 <SwitchPreferenceCompat app:key="adjustResolution" app:defaultValue="false" />
         <SwitchPreferenceCompat app:key="displayStretch" app:defaultValue="false" />
         <SwitchPreferenceCompat app:key="Reseed" app:defaultValue="true" />

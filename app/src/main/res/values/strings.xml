@@ -140,4 +140,7 @@ E.g. <b>META</b> for <i>META key</i>, \n
 
     <string name="lorie_pref_rendererPostSwapTouch">Post-swap touch and fence wait (experimental)</string>
     <string name="lorie_pref_rendererPostSwapTouch_summary">Keeps the existing 1x1 post-swap draw and fence wait. Turn this off only for frame pacing tests if smooth presentation still stutters.</string>
+
+    <string name="lorie_pref_rendererRootFenceWait">Root draw fence wait (experimental)</string>
+    <string name="lorie_pref_rendererRootFenceWait_summary">Keeps the existing wait for root window drawing to finish before presenting. Turn this off only for frame pacing tests; it may cause flicker, tearing, or visual artifacts.</string>
 </resources>
