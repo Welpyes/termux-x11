@@ -141,20 +141,19 @@ static volatile bool rendererOptionsReady = false;
 static uint64_t rendererPerfFrameNo = 0;
 static int64_t rendererLastPerfFrameStartNs = 0;
 static int rendererSwapPressureScore = 0;
-static int rendererBackpressureFrames = 0;
-static int rendererBackpressureSevereFrames = 0;
-static uint64_t rendererBackpressurePacingCount = 0;
+static int rendererPreRedrawCoalesceFrames = 0;
+static int64_t rendererPreRedrawCoalesceWaitUs = 0;
+static int64_t rendererLastPreRedrawCoalesceWaitUs = -1;
+static uint64_t rendererPreRedrawCoalescedCount = 0;
 static int64_t rendererBackpressureLastSwapUs = 0;
 
 #define RENDERER_MEDIUM_SWAP_US 8000
 #define RENDERER_SLOW_SWAP_US 12000
 #define RENDERER_SEVERE_SWAP_US 20000
 #define RENDERER_RECOVERED_SWAP_US 6000
-#define RENDERER_VERY_GOOD_SWAP_US 3000
-#define RENDERER_PRESSURE_SCORE_MAX 12
-#define RENDERER_BACKPRESSURE_HOLD_FRAMES 6
-#define RENDERER_SEVERE_BACKPRESSURE_HOLD_FRAMES 10
-#define RENDERER_SEVERE_BOOST_FRAMES 2
+#define RENDERER_PRESSURE_SCORE_MAX 6
+#define RENDERER_COALESCE_WAIT_LIGHT_US 500
+#define RENDERER_COALESCE_WAIT_SEVERE_US 750
 static int64_t rendererLastFrameStartNs = 0;
 
 static int64_t rendererNowNs(void) {
@@ -664,68 +663,60 @@ static void draw(GLuint id, float x0, float y0, float x1, float y1, float xfacto
 static void drawCursor(float displayWidth, float displayHeight);
 
 
-static int64_t rendererApplySwapBackpressureGuard(bool enabled, int64_t swapUs) {
+static void rendererTimespecAddUs(struct timespec *ts, int64_t us) {
+    ts->tv_sec += us / 1000000;
+    ts->tv_nsec += (long) ((us % 1000000) * 1000);
+
+    while (ts->tv_nsec >= 1000000000L) {
+        ts->tv_sec++;
+        ts->tv_nsec -= 1000000000L;
+    }
+}
+
+static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs) {
     if (!enabled) {
         rendererSwapPressureScore = 0;
-        rendererBackpressureFrames = 0;
-        rendererBackpressureSevereFrames = 0;
+        rendererPreRedrawCoalesceFrames = 0;
+        rendererPreRedrawCoalesceWaitUs = 0;
         rendererBackpressureLastSwapUs = swapUs;
-        return -1;
+        return;
     }
 
     rendererBackpressureLastSwapUs = swapUs;
 
     if (swapUs >= RENDERER_SEVERE_SWAP_US) {
-        rendererSwapPressureScore += 4;
-        rendererBackpressureSevereFrames = RENDERER_SEVERE_BOOST_FRAMES;
-        if (rendererBackpressureFrames < RENDERER_SEVERE_BACKPRESSURE_HOLD_FRAMES)
-            rendererBackpressureFrames = RENDERER_SEVERE_BACKPRESSURE_HOLD_FRAMES;
+        rendererSwapPressureScore += 3;
+
+        if (rendererPreRedrawCoalesceFrames < 2)
+            rendererPreRedrawCoalesceFrames = 2;
+
+        rendererPreRedrawCoalesceWaitUs = RENDERER_COALESCE_WAIT_SEVERE_US;
     } else if (swapUs >= RENDERER_SLOW_SWAP_US) {
-        rendererSwapPressureScore += 2;
-        if (rendererSwapPressureScore >= 4 &&
-                rendererBackpressureFrames < RENDERER_BACKPRESSURE_HOLD_FRAMES)
-            rendererBackpressureFrames = RENDERER_BACKPRESSURE_HOLD_FRAMES;
-    } else if (swapUs >= RENDERER_MEDIUM_SWAP_US) {
         rendererSwapPressureScore += 1;
-        if (rendererSwapPressureScore >= 6 && rendererBackpressureFrames < 4)
-            rendererBackpressureFrames = 4;
-    } else if (swapUs <= RENDERER_VERY_GOOD_SWAP_US) {
-        rendererSwapPressureScore -= 2;
+
+        if (rendererSwapPressureScore >= 2 && rendererPreRedrawCoalesceFrames < 1)
+            rendererPreRedrawCoalesceFrames = 1;
+
+        if (rendererSwapPressureScore >= 2)
+            rendererPreRedrawCoalesceWaitUs = RENDERER_COALESCE_WAIT_LIGHT_US;
+    } else if (swapUs >= RENDERER_MEDIUM_SWAP_US) {
+        if (rendererSwapPressureScore > 0)
+            rendererSwapPressureScore++;
     } else if (swapUs <= RENDERER_RECOVERED_SWAP_US) {
-        rendererSwapPressureScore -= 1;
+        rendererSwapPressureScore = 0;
+        rendererPreRedrawCoalesceFrames = 0;
+        rendererPreRedrawCoalesceWaitUs = 0;
     } else if (rendererSwapPressureScore > 0) {
-        rendererSwapPressureScore -= 1;
+        rendererSwapPressureScore--;
     }
 
     if (rendererSwapPressureScore < 0)
         rendererSwapPressureScore = 0;
     else if (rendererSwapPressureScore > RENDERER_PRESSURE_SCORE_MAX)
         rendererSwapPressureScore = RENDERER_PRESSURE_SCORE_MAX;
-
-    if (rendererBackpressureFrames <= 0)
-        return -1;
-
-    int64_t sleepUs;
-
-    if (rendererBackpressureSevereFrames > 0) {
-        sleepUs = 1000;
-        rendererBackpressureSevereFrames--;
-    } else if (rendererSwapPressureScore >= 8) {
-        sleepUs = 750;
-    } else if (rendererSwapPressureScore >= 4) {
-        sleepUs = 500;
-    } else {
-        sleepUs = 250;
-    }
-
-    rendererBackpressurePacingCount++;
-    usleep((unsigned int) sleepUs);
-
-    if (rendererBackpressureFrames > 0)
-        rendererBackpressureFrames--;
-
-    return sleepUs;
 }
+
+
 
 
 
@@ -741,7 +732,8 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
     int64_t rootWaitUs = rootFenceWaitEnabled ? 0 : -1;
     int64_t swapUs = 0;
     int64_t preSwapFlushUs = -1;
-    int64_t backpressureSleepUs = -1;
+    int64_t coalesceWaitUs = rendererLastPreRedrawCoalesceWaitUs;
+    rendererLastPreRedrawCoalesceWaitUs = -1;
     int64_t postSwapTouchUs = postSwapTouchEnabled ? 0 : -1;
     int64_t postSwapWaitUs = postSwapFenceWaitEnabled ? 0 : -1;
     int64_t frameDeltaUs = 0;
@@ -862,7 +854,7 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
             printEglError("Failed to swap buffers", __LINE__);
     }
 
-    backpressureSleepUs = rendererApplySwapBackpressureGuard(swapBackpressureGuardEnabled, swapUs);
+    rendererUpdateSwapBackpressureGuard(swapBackpressureGuardEnabled, swapUs);
 
     // Perform a little drawing operation to make sure the next buffer is ready on the next invocation of drawing.
     // In gaming fast mode this is disabled, so eglSwapBuffers() is the only submit point.
@@ -900,15 +892,12 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
         int64_t totalUs = rendererNsToUs(rendererNowNs() - frameStartNs);
         int64_t renderTotalUs = totalUs;
 
-        if (backpressureSleepUs > 0 && renderTotalUs > backpressureSleepUs)
-            renderTotalUs -= backpressureSleepUs;
-
         rendererPerfFrameNo++;
 
         if ((rendererPerfFrameNo % 60) == 0 || totalUs > 20000 || swapUs > 12000) {
             log("XloriePerf: frame=%llu mode=%s root_fence_wait=%d post_swap_touch=%d "
                 "post_swap_fence_wait=%d frame_delta_us=%lld root_wait_us=%lld "
-                "swap_us=%lld pre_swap_flush_us=%lld backpressure_sleep_us=%lld pressure_score=%d severe_frames=%d backpressure_active=%d backpressure_frames=%d backpressure_count=%llu post_swap_touch_us=%lld post_swap_wait_us=%lld render_total_us=%lld total_us=%lld",
+                "swap_us=%lld pre_swap_flush_us=%lld coalesce_wait_us=%lld pressure_score=%d coalesce_active=%d coalesce_frames=%d coalesced_count=%llu post_swap_touch_us=%lld post_swap_wait_us=%lld render_total_us=%lld total_us=%lld",
                 (unsigned long long) rendererPerfFrameNo,
                 rendererGetPresentModeName(),
                 rootFenceWaitEnabled ? 1 : 0,
@@ -918,12 +907,11 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
                 (long long) rootWaitUs,
                 (long long) swapUs,
                 (long long) preSwapFlushUs,
-                (long long) backpressureSleepUs,
+                (long long) coalesceWaitUs,
                 rendererSwapPressureScore,
-                rendererBackpressureSevereFrames,
-                rendererBackpressureFrames > 0 ? 1 : 0,
-                rendererBackpressureFrames,
-                (unsigned long long) rendererBackpressurePacingCount,
+                rendererPreRedrawCoalesceFrames > 0 ? 1 : 0,
+                rendererPreRedrawCoalesceFrames,
+                (unsigned long long) rendererPreRedrawCoalescedCount,
                 (long long) postSwapTouchUs,
                 (long long) postSwapWaitUs,
                 (long long) renderTotalUs,
@@ -952,9 +940,31 @@ static inline __always_inline bool rendererShouldWait(bool *waitingForBuffers) {
         // Even in the case if there are pending changes, we can not draw it without rendering surface
         return true;
 
-    if (state->drawRequested || state->cursor.moved || state->cursor.updated)
-        // X server reported drawing or cursor changes, no need to wait.
+    if (state->cursor.moved || state->cursor.updated)
+        // Cursor updates should stay responsive. Do not coalesce them.
         return false;
+
+    if (state->drawRequested) {
+        if (rendererPreRedrawCoalesceFrames > 0 && rendererPreRedrawCoalesceWaitUs > 0) {
+            int64_t waitUs = rendererPreRedrawCoalesceWaitUs;
+            struct timespec deadline;
+
+            clock_gettime(CLOCK_REALTIME, &deadline);
+            rendererTimespecAddUs(&deadline, waitUs);
+
+            rendererLastPreRedrawCoalesceWaitUs = waitUs;
+            rendererPreRedrawCoalescedCount++;
+            rendererPreRedrawCoalesceFrames--;
+
+            // Release stateLock while waiting, so incoming draw requests can merge into this redraw.
+            pthread_cond_timedwait(&stateCond, &stateLock, &deadline);
+        } else {
+            rendererLastPreRedrawCoalesceWaitUs = -1;
+        }
+
+        // X server reported drawing changes. Draw the latest coalesced state now.
+        return false;
+    }
 
     // Probably spurious wake, no changes we can work with.
     return true;
