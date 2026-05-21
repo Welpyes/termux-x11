@@ -561,11 +561,15 @@ public class LorieView extends SurfaceView implements InputStub {
     });
     private final SurfaceHolder.Callback mSurfaceCallback = new SurfaceHolder.Callback() {
         @Override public void surfaceCreated(@NonNull SurfaceHolder holder) {
-            holder.setFormat(PixelFormat.BGRA_8888);
+
+        updateRendererDisplayRefreshRate();
+holder.setFormat(PixelFormat.BGRA_8888);
         }
 
         @Override public void surfaceChanged(@NonNull SurfaceHolder holder, int f, int width, int height) {
-            LorieView.this.surfaceChanged(holder.getSurface());
+
+        updateRendererDisplayRefreshRate();
+LorieView.this.surfaceChanged(holder.getSurface());
             width = getMeasuredWidth();
             height = getMeasuredHeight();
 
@@ -964,7 +968,26 @@ hardwareKbdScancodesWorkaround = p.hardwareKbdScancodesWorkaround.get();
             mIMM.restartInput(this);
     }
 
-    @FastNative private native void nativeInit();
+    private void updateRendererDisplayRefreshRate() {
+    float refreshRate = 60.0f;
+
+    try {
+        android.view.Display display = getDisplay();
+
+        if (display != null)
+            refreshRate = display.getRefreshRate();
+    } catch (Throwable ignored) {
+        refreshRate = 60.0f;
+    }
+
+    if (refreshRate < 30.0f || refreshRate > 240.0f)
+        refreshRate = 60.0f;
+
+    rendererSetDisplayRefreshRate(refreshRate);
+}
+
+@FastNative private native void rendererSetDisplayRefreshRate(float refreshRate);
+@FastNative private native void nativeInit();
     @FastNative private native void surfaceChanged(Surface surface);
     @FastNative private native void setFiltering(int filtering);
 @FastNative private native void setSmoothPresentationEnabled(boolean enabled);

@@ -392,6 +392,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, __unused void *reserved) {
         {"setViewport", "(IIIIII)V", (void *)&rendererSetViewport},
             {"setFiltering", "(I)V", (void *)&rendererSetFiltering},
 {"setSmoothPresentationEnabled", "(Z)V", (void *)&rendererSetSmoothPresentationEnabled},
+{"rendererSetDisplayRefreshRate", "(F)V", (void *)&rendererSetDisplayRefreshRate},
 {"setRendererPerfLogEnabled", "(Z)V", (void *)&rendererSetPerfLogEnabled},
 {"setPostSwapTouchEnabled", "(Z)V", (void *)&rendererSetPostSwapTouchEnabled},
 {"setPostSwapFenceWaitEnabled", "(Z)V", (void *)&rendererSetPostSwapFenceWaitEnabled},

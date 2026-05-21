@@ -146,6 +146,15 @@ static int64_t rendererPreRedrawCoalesceWaitUs = 0;
 static int64_t rendererLastPreRedrawCoalesceWaitUs = -1;
 static uint64_t rendererPreRedrawCoalescedCount = 0;
 static int64_t rendererBackpressureLastSwapUs = 0;
+static float rendererDisplayRefreshRateHz = 60.0f;
+static bool rendererHighRefreshEnabled = false;
+static int64_t rendererRefreshBudgetUs = 16667;
+static int rendererHighRefreshPlateauScore = 0;
+static int rendererHighRefreshGoodFrames = 0;
+static int rendererHighRefreshLimitFrames = 0;
+static int64_t rendererHighRefreshLimitWaitUs = 0;
+static int64_t rendererLastHighRefreshLimitWaitUs = -1;
+static uint64_t rendererHighRefreshLimitedCount = 0;
 
 #define RENDERER_MEDIUM_SWAP_US 8000
 #define RENDERER_SLOW_SWAP_US 12000
@@ -157,6 +166,15 @@ static int64_t rendererBackpressureLastSwapUs = 0;
 #define RENDERER_COALESCE_WAIT_PRESEVERE_US 1000
 #define RENDERER_COALESCE_WAIT_SEVERE_US 2000
 #define RENDERER_COALESCE_WAIT_VERY_SEVERE_US 3000
+#define RENDERER_HR_PLATEAU_SWAP_US 12000
+#define RENDERER_HR_SEVERE_SWAP_US 15000
+#define RENDERER_HR_VERY_SEVERE_SWAP_US 18000
+#define RENDERER_HR_RECOVERED_SWAP_US 9500
+#define RENDERER_HR_PLATEAU_SCORE_MAX 12
+#define RENDERER_HR_GOOD_FRAMES_TO_RECOVER 4
+#define RENDERER_HR_LIMIT_WAIT_PLATEAU_US 500
+#define RENDERER_HR_LIMIT_WAIT_SEVERE_US 1000
+#define RENDERER_HR_LIMIT_WAIT_VERY_SEVERE_US 1500
 static int64_t rendererLastFrameStartNs = 0;
 
 static int64_t rendererNowNs(void) {
@@ -676,7 +694,94 @@ static void rendererTimespecAddUs(struct timespec *ts, int64_t us) {
     }
 }
 
-static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs) {
+__unused void rendererSetDisplayRefreshRate(JNIEnv* env, jobject self, jfloat refreshRate) {
+    (void) env;
+    (void) self;
+
+    if (refreshRate < 30.0f || refreshRate > 240.0f)
+        refreshRate = 60.0f;
+
+    rendererDisplayRefreshRateHz = refreshRate;
+
+    if (refreshRate >= 90.0f) {
+        rendererHighRefreshEnabled = true;
+        rendererRefreshBudgetUs = (int64_t) (1000000.0f / refreshRate + 0.5f);
+    } else {
+        rendererHighRefreshEnabled = false;
+        rendererRefreshBudgetUs = 16667;
+        rendererHighRefreshPlateauScore = 0;
+        rendererHighRefreshGoodFrames = 0;
+        rendererHighRefreshLimitFrames = 0;
+        rendererHighRefreshLimitWaitUs = 0;
+        rendererLastHighRefreshLimitWaitUs = -1;
+    }
+}
+
+static void rendererUpdateHighRefreshPlateauLimiter(bool enabled, int64_t swapUs, int64_t totalUs) {
+    if (!enabled || !rendererHighRefreshEnabled) {
+        rendererHighRefreshPlateauScore = 0;
+        rendererHighRefreshGoodFrames = 0;
+        rendererHighRefreshLimitFrames = 0;
+        rendererHighRefreshLimitWaitUs = 0;
+        return;
+    }
+
+    int64_t pressureUs = swapUs;
+
+    if (totalUs > pressureUs)
+        pressureUs = totalUs;
+
+    if (pressureUs >= RENDERER_HR_VERY_SEVERE_SWAP_US) {
+        rendererHighRefreshPlateauScore += 3;
+        rendererHighRefreshGoodFrames = 0;
+        rendererHighRefreshLimitFrames = 4;
+        rendererHighRefreshLimitWaitUs = RENDERER_HR_LIMIT_WAIT_VERY_SEVERE_US;
+    } else if (pressureUs >= RENDERER_HR_SEVERE_SWAP_US) {
+        rendererHighRefreshPlateauScore += 2;
+        rendererHighRefreshGoodFrames = 0;
+
+        if (rendererHighRefreshLimitFrames < 3)
+            rendererHighRefreshLimitFrames = 3;
+
+        rendererHighRefreshLimitWaitUs = RENDERER_HR_LIMIT_WAIT_SEVERE_US;
+    } else if (pressureUs >= RENDERER_HR_PLATEAU_SWAP_US) {
+        rendererHighRefreshPlateauScore += 1;
+        rendererHighRefreshGoodFrames = 0;
+
+        if (rendererHighRefreshPlateauScore >= 2) {
+            if (rendererHighRefreshLimitFrames < 2)
+                rendererHighRefreshLimitFrames = 2;
+
+            rendererHighRefreshLimitWaitUs = RENDERER_HR_LIMIT_WAIT_PLATEAU_US;
+        }
+    } else if (pressureUs <= RENDERER_HR_RECOVERED_SWAP_US) {
+        rendererHighRefreshGoodFrames++;
+
+        if (rendererHighRefreshGoodFrames >= RENDERER_HR_GOOD_FRAMES_TO_RECOVER) {
+            if (rendererHighRefreshPlateauScore > 0)
+                rendererHighRefreshPlateauScore--;
+
+            if (rendererHighRefreshPlateauScore <= 0) {
+                rendererHighRefreshPlateauScore = 0;
+
+                if (rendererHighRefreshLimitFrames <= 0)
+                    rendererHighRefreshLimitWaitUs = 0;
+            }
+        }
+    } else {
+        rendererHighRefreshGoodFrames = 0;
+
+        if (rendererHighRefreshLimitFrames <= 0)
+            rendererHighRefreshLimitWaitUs = 0;
+    }
+
+    if (rendererHighRefreshPlateauScore < 0)
+        rendererHighRefreshPlateauScore = 0;
+    else if (rendererHighRefreshPlateauScore > RENDERER_HR_PLATEAU_SCORE_MAX)
+        rendererHighRefreshPlateauScore = RENDERER_HR_PLATEAU_SCORE_MAX;
+}
+
+static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, int64_t totalUs) {
     if (!enabled) {
         rendererSwapPressureScore = 0;
         rendererPreRedrawCoalesceFrames = 0;
@@ -747,6 +852,8 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs) {
         rendererSwapPressureScore = 0;
     else if (rendererSwapPressureScore > RENDERER_PRESSURE_SCORE_MAX)
         rendererSwapPressureScore = RENDERER_PRESSURE_SCORE_MAX;
+
+    rendererUpdateHighRefreshPlateauLimiter(enabled, swapUs, totalUs);
 }
 
 
@@ -770,7 +877,9 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
     int64_t swapUs = 0;
     int64_t preSwapFlushUs = -1;
     int64_t coalesceWaitUs = rendererLastPreRedrawCoalesceWaitUs;
+    int64_t highRefreshWaitUs = rendererLastHighRefreshLimitWaitUs;
     rendererLastPreRedrawCoalesceWaitUs = -1;
+    rendererLastHighRefreshLimitWaitUs = -1;
     int64_t postSwapTouchUs = postSwapTouchEnabled ? 0 : -1;
     int64_t postSwapWaitUs = postSwapFenceWaitEnabled ? 0 : -1;
     int64_t frameDeltaUs = 0;
@@ -891,7 +1000,7 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
             printEglError("Failed to swap buffers", __LINE__);
     }
 
-    rendererUpdateSwapBackpressureGuard(swapBackpressureGuardEnabled, swapUs);
+    rendererUpdateSwapBackpressureGuard(swapBackpressureGuardEnabled, swapUs, totalUs);
 
     // Perform a little drawing operation to make sure the next buffer is ready on the next invocation of drawing.
     // In gaming fast mode this is disabled, so eglSwapBuffers() is the only submit point.
@@ -931,10 +1040,10 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
 
         rendererPerfFrameNo++;
 
-        if ((rendererPerfFrameNo % 60) == 0 || totalUs > 20000 || swapUs > 12000 || coalesceWaitUs > 0 || rendererPreRedrawCoalesceFrames > 0) {
+        if ((rendererPerfFrameNo % 60) == 0 || totalUs > 20000 || swapUs > 12000 || coalesceWaitUs > 0 || highRefreshWaitUs > 0 || rendererPreRedrawCoalesceFrames > 0 || rendererHighRefreshLimitFrames > 0) {
             log("XloriePerf: frame=%llu mode=%s root_fence_wait=%d post_swap_touch=%d "
                 "post_swap_fence_wait=%d frame_delta_us=%lld root_wait_us=%lld "
-                "swap_us=%lld pre_swap_flush_us=%lld applied_coalesce_wait_us=%lld pending_coalesce_wait_us=%lld pressure_score=%d coalesce_active=%d coalesce_frames=%d coalesced_count=%llu last_swap_us=%lld post_swap_touch_us=%lld post_swap_wait_us=%lld render_total_us=%lld total_us=%lld",
+                "swap_us=%lld pre_swap_flush_us=%lld applied_coalesce_wait_us=%lld pending_coalesce_wait_us=%lld pressure_score=%d coalesce_active=%d coalesce_frames=%d coalesced_count=%llu display_refresh_hz=%.1f refresh_budget_us=%lld hr_enabled=%d hr_score=%d hr_good_frames=%d hr_wait_us=%lld hr_active=%d hr_frames=%d hr_count=%llu last_swap_us=%lld post_swap_touch_us=%lld post_swap_wait_us=%lld render_total_us=%lld total_us=%lld",
                 (unsigned long long) rendererPerfFrameNo,
                 rendererGetPresentModeName(),
                 rootFenceWaitEnabled ? 1 : 0,
@@ -950,6 +1059,15 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
                 rendererPreRedrawCoalesceFrames > 0 ? 1 : 0,
                 rendererPreRedrawCoalesceFrames,
                 (unsigned long long) rendererPreRedrawCoalescedCount,
+                rendererDisplayRefreshRateHz,
+                (long long) rendererRefreshBudgetUs,
+                rendererHighRefreshEnabled ? 1 : 0,
+                rendererHighRefreshPlateauScore,
+                rendererHighRefreshGoodFrames,
+                (long long) highRefreshWaitUs,
+                rendererHighRefreshLimitFrames > 0 ? 1 : 0,
+                rendererHighRefreshLimitFrames,
+                (unsigned long long) rendererHighRefreshLimitedCount,
                 (long long) rendererBackpressureLastSwapUs,
                 (long long) postSwapTouchUs,
                 (long long) postSwapWaitUs,
@@ -984,24 +1102,53 @@ static inline __always_inline bool rendererShouldWait(bool *waitingForBuffers) {
         return false;
 
     if (state->drawRequested) {
-        if (rendererPreRedrawCoalesceFrames > 0 && rendererPreRedrawCoalesceWaitUs > 0) {
-            int64_t waitUs = rendererPreRedrawCoalesceWaitUs;
+        int64_t coalesceWaitUs = -1;
+        int64_t highRefreshWaitUs = -1;
+        int64_t waitUs = -1;
+
+        if (rendererPreRedrawCoalesceFrames > 0 && rendererPreRedrawCoalesceWaitUs > 0)
+            coalesceWaitUs = rendererPreRedrawCoalesceWaitUs;
+
+        if (rendererHighRefreshLimitFrames > 0 && rendererHighRefreshLimitWaitUs > 0)
+            highRefreshWaitUs = rendererHighRefreshLimitWaitUs;
+
+        if (coalesceWaitUs > waitUs)
+            waitUs = coalesceWaitUs;
+
+        if (highRefreshWaitUs > waitUs)
+            waitUs = highRefreshWaitUs;
+
+        rendererLastPreRedrawCoalesceWaitUs = coalesceWaitUs;
+        rendererLastHighRefreshLimitWaitUs = highRefreshWaitUs;
+
+        if (waitUs > 0) {
             struct timespec deadline;
 
             clock_gettime(CLOCK_REALTIME, &deadline);
             rendererTimespecAddUs(&deadline, waitUs);
 
-            rendererLastPreRedrawCoalesceWaitUs = waitUs;
-            rendererPreRedrawCoalescedCount++;
-            rendererPreRedrawCoalesceFrames--;
+            if (coalesceWaitUs > 0) {
+                rendererPreRedrawCoalescedCount++;
+                rendererPreRedrawCoalesceFrames--;
 
-            // Release stateLock while waiting, so incoming draw requests can merge into this redraw.
+                if (rendererPreRedrawCoalesceFrames <= 0)
+                    rendererPreRedrawCoalesceWaitUs = 0;
+            }
+
+            if (highRefreshWaitUs > 0) {
+                rendererHighRefreshLimitedCount++;
+                rendererHighRefreshLimitFrames--;
+
+                if (rendererHighRefreshLimitFrames <= 0)
+                    rendererHighRefreshLimitWaitUs = 0;
+            }
+
             pthread_cond_timedwait(&stateCond, &stateLock, &deadline);
         } else {
             rendererLastPreRedrawCoalesceWaitUs = -1;
+            rendererLastHighRefreshLimitWaitUs = -1;
         }
 
-        // X server reported drawing changes. Draw the latest coalesced state now.
         return false;
     }
 

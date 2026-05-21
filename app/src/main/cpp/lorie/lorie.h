@@ -39,6 +39,7 @@ bool lorieConnectionAlive(void);
 __unused void rendererInit(JNIEnv* env);
 __unused void rendererSetFiltering(JNIEnv* env, jobject self, jint filtering);
 __unused void rendererSetSmoothPresentationEnabled(JNIEnv* env, jobject self, jboolean enabled);
+__unused void rendererSetDisplayRefreshRate(JNIEnv* env, jobject self, jfloat refreshRate);
 __unused void rendererSetPerfLogEnabled(JNIEnv* env, jobject self, jboolean enabled);
 __unused void rendererSetPostSwapTouchEnabled(JNIEnv* env, jobject self, jboolean enabled);
 __unused void rendererSetPostSwapFenceWaitEnabled(JNIEnv* env, jobject self, jboolean enabled);
