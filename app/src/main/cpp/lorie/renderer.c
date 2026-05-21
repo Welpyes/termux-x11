@@ -725,10 +725,17 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs) {
         if (rendererPreRedrawCoalesceFrames <= 0)
             rendererPreRedrawCoalesceWaitUs = 0;
     } else if (swapUs <= RENDERER_RECOVERED_SWAP_US) {
-        // Fast recovery: non-mailbox should stay untouched and mailbox should return to normal quickly.
+        // Fast recovery: non-mailbox should stay untouched.
+        //
+        // v3.3 sticky cooldown:
+        // If a severe/very-severe swap armed pre-redraw coalescing, do not cancel
+        // the remaining cooldown just because the first coalesced frame recovered.
+        // This prevents mailbox from oscillating:
+        //   severe swap -> one good coalesced frame -> severe swap again.
         rendererSwapPressureScore = 0;
-        rendererPreRedrawCoalesceFrames = 0;
-        rendererPreRedrawCoalesceWaitUs = 0;
+
+        if (rendererPreRedrawCoalesceFrames <= 0)
+            rendererPreRedrawCoalesceWaitUs = 0;
     } else if (rendererSwapPressureScore > 0) {
         rendererSwapPressureScore--;
 
