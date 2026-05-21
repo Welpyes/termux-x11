@@ -346,44 +346,7 @@ public class LorieView extends SurfaceView implements InputStub {
     private final InputMethodManager mIMM = (InputMethodManager)getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
     private Callback mCallback; private boolean desktopModeOutputProfileActive = false;
 
-private boolean rendererVsyncCallbackEnabled = false;
-private final android.os.Handler rendererVsyncHandler = new android.os.Handler(android.os.Looper.getMainLooper());
-private final android.view.Choreographer.FrameCallback rendererVsyncCallback = new android.view.Choreographer.FrameCallback() {
-    @Override
-    public void doFrame(long frameTimeNanos) {
-        rendererOnVsync(frameTimeNanos);
 
-        if (rendererVsyncCallbackEnabled)
-            android.view.Choreographer.getInstance().postFrameCallback(this);
-    }
-};
-
-
-private void setRendererVsyncCallbackEnabled(boolean enabled) {
-    if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
-        rendererVsyncHandler.post(() -> setRendererVsyncCallbackEnabled(enabled));
-        return;
-    }
-
-    if (rendererVsyncCallbackEnabled == enabled)
-        return;
-
-    rendererVsyncCallbackEnabled = enabled;
-
-    android.view.Choreographer choreographer = android.view.Choreographer.getInstance();
-    choreographer.removeFrameCallback(rendererVsyncCallback);
-
-    if (enabled)
-        choreographer.postFrameCallback(rendererVsyncCallback);
-
-    android.util.Log.d("LorieView", "renderer vsync callback enabled=" + enabled);
-}
-
-private void configureRendererVsyncCoalescing(boolean enabled) {
-    android.util.Log.d("LorieView", "renderer vsync coalescing request=" + enabled);
-    setVsyncCoalescingEnabled(enabled);
-    setRendererVsyncCallbackEnabled(enabled);
-}
 
 
     private final Point p = new Point();
@@ -889,7 +852,6 @@ setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.
 setRendererPerfLogEnabled(p.get().getBoolean("rendererPerfLog", false));
     String rendererOutputMode = p.get().getString("rendererOutputMode", "compat");
     boolean rendererGamingFast = "gaming_fast".equals(rendererOutputMode);
-    configureRendererVsyncCoalescing(rendererGamingFast);
 
     if (rendererGamingFast) {
         setSmoothPresentationEnabled(false);
@@ -1010,8 +972,6 @@ hardwareKbdScancodesWorkaround = p.hardwareKbdScancodesWorkaround.get();
 @FastNative private native void setPostSwapTouchEnabled(boolean enabled);
 @FastNative private native void setPostSwapFenceWaitEnabled(boolean enabled);
 @FastNative private native void setRootFenceWaitEnabled(boolean enabled);
-@FastNative private native void setVsyncCoalescingEnabled(boolean enabled);
-@FastNative private native void rendererOnVsync(long frameTimeNanos);
     @FastNative static native void connect(int fd);
     @CriticalNative static native boolean connected();
     @FastNative static native void startLogcat(int fd);

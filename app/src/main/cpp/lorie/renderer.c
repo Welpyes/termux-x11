@@ -135,15 +135,6 @@ static volatile bool rendererPerfLogEnabled = false;
 static volatile bool rendererPostSwapTouchEnabled = true;
 static volatile bool rendererPostSwapFenceWaitEnabled = true;
 static volatile bool rendererRootFenceWaitEnabled = true;
-static volatile bool rendererVsyncCoalescingEnabled = false;
-static volatile uint64_t rendererVsyncSerial = 0;
-static volatile uint64_t rendererConsumedVsyncSerial = 0;
-static volatile uint64_t rendererVsyncSignalCount = 0;
-static volatile uint64_t rendererVsyncDrawCount = 0;
-static volatile uint64_t rendererVsyncWaitCount = 0;
-static volatile int64_t rendererLastVsyncFrameTimeNs = 0;
-static EGLBoolean (*rendererPresentationTimeANDROID)(EGLDisplay display, EGLSurface surface, EGLnsecsANDROID time) = NULL;
-static bool rendererPresentationTimeAvailable = false;
 static volatile bool presentModeChanged = false;
 static volatile bool rendererOptionsReady = false;
 static uint64_t rendererPerfFrameNo = 0;
@@ -159,22 +150,7 @@ static inline int64_t rendererNsToUs(int64_t ns) {
     return ns / 1000LL;
 }
 
-static void rendererApplyPresentationTime(void) {
-    if (!rendererVsyncCoalescingEnabled)
-        return;
 
-    if (!rendererPresentationTimeAvailable || !rendererPresentationTimeANDROID)
-        return;
-
-    if (egl_display == EGL_NO_DISPLAY || sfc == EGL_NO_SURFACE)
-        return;
-
-    int64_t frameTimeNs = rendererLastVsyncFrameTimeNs;
-    if (frameTimeNs <= 0)
-        return;
-
-    rendererPresentationTimeANDROID(egl_display, sfc, (EGLnsecsANDROID) frameTimeNs);
-}
 
 
 
@@ -268,13 +244,7 @@ int rendererInitThread(void) {
 
     log("Xlorie: Initialized EGL version %d.%d\n", major, minor);
 
-    rendererPresentationTimeANDROID = (void *) eglGetProcAddress("eglPresentationTimeANDROID");
-    const char *eglExtensions = eglQueryString(egl_display, EGL_EXTENSIONS);
-    rendererPresentationTimeAvailable =
-        rendererPresentationTimeANDROID &&
-        eglExtensions &&
-        strstr(eglExtensions, "EGL_ANDROID_presentation_time") != NULL;
-    log("Xlorie: eglPresentationTimeANDROID support=%d", rendererPresentationTimeAvailable ? 1 : 0);
+
     eglBindAPI(EGL_OPENGL_ES_API);
 
     if (eglChooseConfig(egl_display, configAttribs, &cfg, 1, &numConfigs) != EGL_TRUE &&
@@ -399,58 +369,10 @@ void rendererSetRootFenceWaitEnabled(JNIEnv* env, jobject self, jboolean enabled
 }
 
 
-void rendererSetVsyncCoalescingEnabled(JNIEnv* env, jobject self, jboolean enabled) {
-    (void) env;
-    (void) self;
-
-    bool newEnabled = enabled == JNI_TRUE;
-    bool oldEnabled;
-
-    pthread_mutex_lock(&stateLock);
-    oldEnabled = rendererVsyncCoalescingEnabled;
-    rendererVsyncCoalescingEnabled = newEnabled;
-    rendererVsyncSerial = 0;
-    rendererConsumedVsyncSerial = 0;
-    rendererLastVsyncFrameTimeNs = 0;
-    rendererVsyncSignalCount = 0;
-    rendererVsyncDrawCount = 0;
-    rendererVsyncWaitCount = 0;
-    pthread_cond_signal(&stateCond);
-    pthread_mutex_unlock(&stateLock);
-
-    log("Xlorie: vsync coalescing enabled=%d previous=%d",
-        newEnabled ? 1 : 0,
-        oldEnabled ? 1 : 0);
-}
 
 
-void rendererOnVsync(JNIEnv* env, jobject self, jlong frameTimeNanos) {
-    (void) env;
-    (void) self;
 
-    if (!rendererVsyncCoalescingEnabled)
-        return;
 
-    uint64_t serial;
-    uint64_t signalCount;
-    int64_t frameTimeNs = (int64_t) frameTimeNanos;
-
-    pthread_mutex_lock(&stateLock);
-    rendererLastVsyncFrameTimeNs = frameTimeNs;
-    rendererVsyncSerial++;
-    rendererVsyncSignalCount++;
-    serial = rendererVsyncSerial;
-    signalCount = rendererVsyncSignalCount;
-    pthread_cond_signal(&stateCond);
-    pthread_mutex_unlock(&stateLock);
-
-    if (signalCount == 1 || (signalCount % 300) == 0) {
-        log("Xlorie: vsync callback alive serial=%llu signals=%llu frame_time_ns=%lld",
-            (unsigned long long) serial,
-            (unsigned long long) signalCount,
-            (long long) frameTimeNs);
-    }
-}
 
 
 
@@ -727,7 +649,16 @@ static void drawCursor(float displayWidth, float displayHeight);
 void rendererRedrawLocked(bool* waitingForBuffers) {
     float xfactor = 1.f;
     LorieBuffer_Desc *desc = NULL;
-    EGLSync fence; int64_t frameStartNs = rendererPerfLogEnabled ? rendererNowNs() : 0; int64_t rootWaitUs = rendererRootFenceWaitEnabled ? 0 : -1; int64_t swapUs = 0; int64_t postSwapTouchUs = rendererPostSwapTouchEnabled ? 0 : -1; int64_t postSwapWaitUs = (rendererPostSwapTouchEnabled && rendererPostSwapFenceWaitEnabled) ? 0 : -1; int64_t frameDeltaUs = 0; if (rendererPerfLogEnabled) { if (rendererLastFrameStartNs != 0) frameDeltaUs = rendererNsToUs(frameStartNs - rendererLastFrameStartNs); rendererLastFrameStartNs = frameStartNs; }
+    EGLSync fence = EGL_NO_SYNC_KHR;
+    bool rootFenceWaitEnabled = rendererRootFenceWaitEnabled;
+    bool postSwapTouchEnabled = rendererPostSwapTouchEnabled;
+    bool postSwapFenceWaitEnabled = postSwapTouchEnabled && rendererPostSwapFenceWaitEnabled;
+    int64_t frameStartNs = rendererPerfLogEnabled ? rendererNowNs() : 0;
+    int64_t rootWaitUs = rootFenceWaitEnabled ? 0 : -1;
+    int64_t swapUs = 0;
+    int64_t postSwapTouchUs = postSwapTouchEnabled ? 0 : -1;
+    int64_t postSwapWaitUs = postSwapFenceWaitEnabled ? 0 : -1;
+    int64_t frameDeltaUs = 0;
     // The buffer will not be released until this function ends, but main thread can modify buffer list
     pthread_spin_lock(&bufferLock);
     LorieBuffer *buffer = LorieBufferList_findById(&buffers, state->rootWindowTextureID);
@@ -783,8 +714,10 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
     if (desc->type == LORIEBUFFER_FD)
         xfactor = (float) desc->width/(float) desc->stride;
     draw(0, -1.f, -1.f, 1.f, 1.f, xfactor, LorieBuffer_isRgba(buffer));
-    fence = eglCreateSyncKHR(egl_display, EGL_SYNC_FENCE_KHR, NULL);
-    glFlush();
+    if (rootFenceWaitEnabled) {
+        fence = eglCreateSyncKHR(egl_display, EGL_SYNC_FENCE_KHR, NULL);
+        glFlush();
+    }
 
     if (state->cursor.updated) {
         log("Xlorie: updating cursor\n");
@@ -799,15 +732,25 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
     drawCursor((float) (LorieBuffer_getWidth(buffer)), (float) (LorieBuffer_getHeight(buffer)));
     glFlush();
 
-    /* Wait until root window drawing is finished before giving control back to X server. */ if (rendererRootFenceWaitEnabled) { if (rendererPerfLogEnabled) { int64_t waitStartNs = rendererNowNs(); eglClientWaitSyncKHR(egl_display, fence, 0, EGL_FOREVER); rootWaitUs = rendererNsToUs(rendererNowNs() - waitStartNs); } else { eglClientWaitSyncKHR(egl_display, fence, 0, EGL_FOREVER); } } eglDestroySyncKHR(egl_display, fence);
+    /* Wait until root window drawing is finished before giving control back to X server. */ if (rootFenceWaitEnabled && fence != EGL_NO_SYNC_KHR) {
+        if (rendererPerfLogEnabled) {
+            int64_t waitStartNs = rendererNowNs();
+            eglClientWaitSyncKHR(egl_display, fence, 0, EGL_FOREVER);
+            rootWaitUs = rendererNsToUs(rendererNowNs() - waitStartNs);
+        } else {
+            eglClientWaitSyncKHR(egl_display, fence, 0, EGL_FOREVER);
+        }
+
+        eglDestroySyncKHR(egl_display, fence);
+        fence = EGL_NO_SYNC_KHR;
+    }
     state->waitForNextFrame = true;
     lorie_mutex_unlock(&state->lock, &state->lockingPid);
+if (rendererPerfLogEnabled) { int64_t swapStartNs = rendererNowNs(); if (eglSwapBuffers(egl_display, sfc) != EGL_TRUE) printEglError("Failed to swap buffers", __LINE__); swapUs = rendererNsToUs(rendererNowNs() - swapStartNs); } else { if (eglSwapBuffers(egl_display, sfc) != EGL_TRUE) printEglError("Failed to swap buffers", __LINE__); }
 
-    rendererApplyPresentationTime();
-
-    if (rendererPerfLogEnabled) { int64_t swapStartNs = rendererNowNs(); if (eglSwapBuffers(egl_display, sfc) != EGL_TRUE) printEglError("Failed to swap buffers", __LINE__); swapUs = rendererNsToUs(rendererNowNs() - swapStartNs); } else { if (eglSwapBuffers(egl_display, sfc) != EGL_TRUE) printEglError("Failed to swap buffers", __LINE__); }
-
-    // Perform a little drawing operation to make sure the next buffer is ready on the next invocation of drawing if (rendererPostSwapTouchEnabled) {
+    // Perform a little drawing operation to make sure the next buffer is ready on the next invocation of drawing.
+    // In gaming fast mode this is disabled, so eglSwapBuffers() is the only submit point.
+    if (postSwapTouchEnabled) {
         int64_t postSwapTouchStartNs = rendererNowNs();
 
         glEnable(GL_SCISSOR_TEST);
@@ -819,7 +762,7 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
 
         postSwapTouchUs = rendererNsToUs(rendererNowNs() - postSwapTouchStartNs);
 
-        if (rendererPostSwapFenceWaitEnabled) {
+        if (postSwapFenceWaitEnabled) {
             fence = eglCreateSyncKHR(egl_display, EGL_SYNC_FENCE_KHR, NULL);
 
             if (rendererPerfLogEnabled) {
@@ -831,7 +774,10 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
             }
 
             eglDestroySyncKHR(egl_display, fence);
+            fence = EGL_NO_SYNC_KHR;
         }
+    }
+
     state->renderedFrames++;
 
     if (rendererPerfLogEnabled) {
@@ -839,27 +785,14 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
         rendererPerfFrameNo++;
 
         if ((rendererPerfFrameNo % 60) == 0 || totalUs > 20000 || swapUs > 12000) {
-                        log("XloriePerfVsync: frame=%llu vsync_coalescing=%d "
-                            "vsync_serial=%llu consumed_vsync_serial=%llu vsync_pending=%d "
-                            "vsync_signals=%llu vsync_draws=%llu vsync_waits=%llu "
-                            "presentation_time=%d last_vsync_frame_time_ns=%lld",
-                            (unsigned long long) rendererPerfFrameNo,
-                            rendererVsyncCoalescingEnabled ? 1 : 0,
-                            (unsigned long long) rendererVsyncSerial,
-                            (unsigned long long) rendererConsumedVsyncSerial,
-                            rendererVsyncSerial != rendererConsumedVsyncSerial ? 1 : 0,
-                            (unsigned long long) rendererVsyncSignalCount,
-                            (unsigned long long) rendererVsyncDrawCount,
-                            (unsigned long long) rendererVsyncWaitCount,
-                            rendererPresentationTimeAvailable ? 1 : 0,
-                            (long long) rendererLastVsyncFrameTimeNs);
-
-                        log("XloriePerf: frame=%llu mode=%s root_fence_wait=%d post_swap_touch=%d post_swap_fence_wait=%d frame_delta_us=%lld root_wait_us=%lld swap_us=%lld post_swap_touch_us=%lld post_swap_wait_us=%lld total_us=%lld",
+            log("XloriePerf: frame=%llu mode=%s root_fence_wait=%d post_swap_touch=%d "
+                "post_swap_fence_wait=%d frame_delta_us=%lld root_wait_us=%lld "
+                "swap_us=%lld post_swap_touch_us=%lld post_swap_wait_us=%lld total_us=%lld",
                 (unsigned long long) rendererPerfFrameNo,
                 rendererGetPresentModeName(),
-                rendererRootFenceWaitEnabled ? 1 : 0,
-                rendererPostSwapTouchEnabled ? 1 : 0,
-                rendererPostSwapFenceWaitEnabled ? 1 : 0,
+                rootFenceWaitEnabled ? 1 : 0,
+                postSwapTouchEnabled ? 1 : 0,
+                postSwapFenceWaitEnabled ? 1 : 0,
                 (long long) frameDeltaUs,
                 (long long) rootWaitUs,
                 (long long) swapUs,
@@ -890,18 +823,9 @@ static inline __always_inline bool rendererShouldWait(bool *waitingForBuffers) {
         // Even in the case if there are pending changes, we can not draw it without rendering surface
         return true;
 
-    if (state->drawRequested || state->cursor.moved || state->cursor.updated) {
-        // X server reported drawing or cursor changes.
-        // In gaming fast mode, coalesce them until the next Android VSYNC callback.
-        if (rendererVsyncCoalescingEnabled &&
-            rendererLastVsyncFrameTimeNs != 0 &&
-            rendererVsyncSerial == rendererConsumedVsyncSerial) {
-            rendererVsyncWaitCount++;
-            return true;
-        }
-
+    if (state->drawRequested || state->cursor.moved || state->cursor.updated)
+        // X server reported drawing or cursor changes, no need to wait.
         return false;
-    }
 
     // Probably spurious wake, no changes we can work with.
     return true;
@@ -952,12 +876,7 @@ __noreturn static void* rendererThread(void) {
 
         if (state && state->surfaceAvailable && !state->waitForNextFrame &&
             (state->drawRequested || state->cursor.moved || state->cursor.updated)) {
-            if (rendererVsyncCoalescingEnabled) {
-                rendererConsumedVsyncSerial = rendererVsyncSerial;
-                rendererVsyncDrawCount++;
-            }
-
-            rendererRedrawLocked(&waitingForBuffers);
+rendererRedrawLocked(&waitingForBuffers);
         }
 
         pthread_spin_lock(&bufferLock);
