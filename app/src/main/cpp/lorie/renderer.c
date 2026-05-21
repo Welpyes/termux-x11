@@ -731,55 +731,41 @@ static void rendererUpdateHighRefreshPlateauLimiter(bool enabled, int64_t swapUs
     if (totalUs > pressureUs)
         pressureUs = totalUs;
 
+    // v3.8 latency-first:
+    // Keep high-refresh pressure scoring for logs, but do not delay redraws.
+    // v3.7 proved that 500~1500us sleeps do not break the 12~16ms plateau
+    // and may add input/display latency on on-screen 120Hz.
     if (pressureUs >= RENDERER_HR_VERY_SEVERE_SWAP_US) {
         rendererHighRefreshPlateauScore += 3;
         rendererHighRefreshGoodFrames = 0;
-        rendererHighRefreshLimitFrames = 4;
-        rendererHighRefreshLimitWaitUs = RENDERER_HR_LIMIT_WAIT_VERY_SEVERE_US;
     } else if (pressureUs >= RENDERER_HR_SEVERE_SWAP_US) {
         rendererHighRefreshPlateauScore += 2;
         rendererHighRefreshGoodFrames = 0;
-
-        if (rendererHighRefreshLimitFrames < 3)
-            rendererHighRefreshLimitFrames = 3;
-
-        rendererHighRefreshLimitWaitUs = RENDERER_HR_LIMIT_WAIT_SEVERE_US;
     } else if (pressureUs >= RENDERER_HR_PLATEAU_SWAP_US) {
         rendererHighRefreshPlateauScore += 1;
         rendererHighRefreshGoodFrames = 0;
-
-        if (rendererHighRefreshPlateauScore >= 2) {
-            if (rendererHighRefreshLimitFrames < 2)
-                rendererHighRefreshLimitFrames = 2;
-
-            rendererHighRefreshLimitWaitUs = RENDERER_HR_LIMIT_WAIT_PLATEAU_US;
-        }
     } else if (pressureUs <= RENDERER_HR_RECOVERED_SWAP_US) {
         rendererHighRefreshGoodFrames++;
 
         if (rendererHighRefreshGoodFrames >= RENDERER_HR_GOOD_FRAMES_TO_RECOVER) {
             if (rendererHighRefreshPlateauScore > 0)
                 rendererHighRefreshPlateauScore--;
-
-            if (rendererHighRefreshPlateauScore <= 0) {
-                rendererHighRefreshPlateauScore = 0;
-
-                if (rendererHighRefreshLimitFrames <= 0)
-                    rendererHighRefreshLimitWaitUs = 0;
-            }
         }
     } else {
         rendererHighRefreshGoodFrames = 0;
-
-        if (rendererHighRefreshLimitFrames <= 0)
-            rendererHighRefreshLimitWaitUs = 0;
     }
 
     if (rendererHighRefreshPlateauScore < 0)
         rendererHighRefreshPlateauScore = 0;
     else if (rendererHighRefreshPlateauScore > RENDERER_HR_PLATEAU_SCORE_MAX)
         rendererHighRefreshPlateauScore = RENDERER_HR_PLATEAU_SCORE_MAX;
+
+    // Latency-first mode: never arm the high-refresh wait path.
+    rendererHighRefreshLimitFrames = 0;
+    rendererHighRefreshLimitWaitUs = 0;
 }
+
+
 
 static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, int64_t totalUs) {
     if (!enabled) {

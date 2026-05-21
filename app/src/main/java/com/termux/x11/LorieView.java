@@ -968,7 +968,27 @@ hardwareKbdScancodesWorkaround = p.hardwareKbdScancodesWorkaround.get();
             mIMM.restartInput(this);
     }
 
-    private void updateRendererDisplayRefreshRate() {
+    private void requestRendererSurfaceFrameRate(float refreshRate) {
+    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R)
+        return;
+
+    try {
+        android.view.Surface surface = getHolder() != null ? getHolder().getSurface() : null;
+
+        if (surface == null || !surface.isValid())
+            return;
+
+        surface.setFrameRate(
+                refreshRate,
+                android.view.Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
+                android.view.Surface.CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS);
+
+        android.util.Log.d("LorieView", "Requested surface frame rate " + refreshRate);
+    } catch (Throwable ignored) {
+    }
+}
+
+private void updateRendererDisplayRefreshRate() {
     float refreshRate = 60.0f;
 
     try {
@@ -984,6 +1004,7 @@ hardwareKbdScancodesWorkaround = p.hardwareKbdScancodesWorkaround.get();
         refreshRate = 60.0f;
 
     rendererSetDisplayRefreshRate(refreshRate);
+    requestRendererSurfaceFrameRate(refreshRate);
 }
 
 @FastNative private native void rendererSetDisplayRefreshRate(float refreshRate);
