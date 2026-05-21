@@ -1000,7 +1000,8 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
             printEglError("Failed to swap buffers", __LINE__);
     }
 
-    rendererUpdateSwapBackpressureGuard(swapBackpressureGuardEnabled, swapUs, totalUs);
+    int64_t guardTotalUs = rendererNsToUs(rendererNowNs() - frameStartNs);
+    rendererUpdateSwapBackpressureGuard(swapBackpressureGuardEnabled, swapUs, guardTotalUs);
 
     // Perform a little drawing operation to make sure the next buffer is ready on the next invocation of drawing.
     // In gaming fast mode this is disabled, so eglSwapBuffers() is the only submit point.
