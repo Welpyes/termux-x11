@@ -146,10 +146,6 @@ static int64_t rendererPreRedrawCoalesceWaitUs = 0;
 static int64_t rendererLastPreRedrawCoalesceWaitUs = -1;
 static uint64_t rendererPreRedrawCoalescedCount = 0;
 static int64_t rendererBackpressureLastSwapUs = 0;
-static int rendererMailboxStormFrames = 0;
-static int64_t rendererMailboxStormWaitUs = 0;
-static int64_t rendererLastStormLimitWaitUs = -1;
-static uint64_t rendererMailboxStormLimitedCount = 0;
 
 #define RENDERER_MEDIUM_SWAP_US 8000
 #define RENDERER_SLOW_SWAP_US 12000
@@ -159,11 +155,8 @@ static uint64_t rendererMailboxStormLimitedCount = 0;
 #define RENDERER_RECOVERED_SWAP_US 8000
 #define RENDERER_PRESSURE_SCORE_MAX 6
 #define RENDERER_COALESCE_WAIT_PRESEVERE_US 1000
-#define RENDERER_COALESCE_WAIT_SEVERE_US 2000
-#define RENDERER_COALESCE_WAIT_VERY_SEVERE_US 3000
-#define RENDERER_STORM_LIMIT_WAIT_US 10000
-#define RENDERER_STORM_HOLD_FRAMES 6
-#define RENDERER_STORM_HOLD_FRAMES_VERY_SEVERE 8
+#define RENDERER_COALESCE_WAIT_SEVERE_US 3000
+#define RENDERER_COALESCE_WAIT_VERY_SEVERE_US 4000
 static int64_t rendererLastFrameStartNs = 0;
 
 static int64_t rendererNowNs(void) {
@@ -683,13 +676,11 @@ static void rendererTimespecAddUs(struct timespec *ts, int64_t us) {
     }
 }
 
-static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, int64_t appliedCoalesceWaitUs) {
+static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs) {
     if (!enabled) {
         rendererSwapPressureScore = 0;
         rendererPreRedrawCoalesceFrames = 0;
         rendererPreRedrawCoalesceWaitUs = 0;
-        rendererMailboxStormFrames = 0;
-        rendererMailboxStormWaitUs = 0;
         rendererBackpressureLastSwapUs = swapUs;
         return;
     }
@@ -697,20 +688,23 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, in
     rendererBackpressureLastSwapUs = swapUs;
 
     if (swapUs >= RENDERER_VERY_SEVERE_SWAP_US) {
-        // v3.5: back to v3.3-style coalescing strength.
+        // v3.4: very severe swap needs a stronger sticky cooldown.
+        // This path is expected to be mailbox-only in normal DeX 60Hz use.
         rendererSwapPressureScore = RENDERER_PRESSURE_SCORE_MAX;
         rendererPreRedrawCoalesceFrames = 3;
         rendererPreRedrawCoalesceWaitUs = RENDERER_COALESCE_WAIT_VERY_SEVERE_US;
     } else if (swapUs >= RENDERER_SEVERE_SWAP_US) {
-        // v3.5: keep severe coalescing light; storm limiter handles repeated severe swaps.
+        // v3.4: 20~25ms severe swaps were still repeating with 2000us.
+        // Use 3000us and keep it sticky for 3 redraws.
         if (rendererSwapPressureScore < 4)
             rendererSwapPressureScore = 4;
         else
             rendererSwapPressureScore++;
 
-        rendererPreRedrawCoalesceFrames = 2;
+        rendererPreRedrawCoalesceFrames = 3;
         rendererPreRedrawCoalesceWaitUs = RENDERER_COALESCE_WAIT_SEVERE_US;
     } else if (swapUs >= RENDERER_PRESEVERE_SWAP_US) {
+        // 18~20ms is a warning zone. Do one light coalesce to avoid crossing into very severe.
         if (rendererSwapPressureScore < 2)
             rendererSwapPressureScore = 2;
 
@@ -719,57 +713,43 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, in
 
         rendererPreRedrawCoalesceWaitUs = RENDERER_COALESCE_WAIT_PRESEVERE_US;
     } else if (swapUs >= RENDERER_SLOW_SWAP_US) {
+        // Ordinary 12~18ms swaps are common. Track lightly, but do not arm coalescing.
         if (rendererSwapPressureScore < 1)
             rendererSwapPressureScore = 1;
 
         if (rendererPreRedrawCoalesceFrames <= 0)
             rendererPreRedrawCoalesceWaitUs = 0;
     } else if (swapUs >= RENDERER_MEDIUM_SWAP_US) {
+        // Medium swaps should not keep pressure around for long.
         if (rendererSwapPressureScore > 0)
             rendererSwapPressureScore--;
 
         if (rendererPreRedrawCoalesceFrames <= 0)
             rendererPreRedrawCoalesceWaitUs = 0;
     } else if (swapUs <= RENDERER_RECOVERED_SWAP_US) {
-        // Sticky cooldown remains: do not cancel already-armed coalesce/storm on first good frame.
+        // Fast recovery: non-mailbox should stay untouched.
+        //
+        // v3.3 sticky cooldown:
+        // If a severe/very-severe swap armed pre-redraw coalescing, do not cancel
+        // the remaining cooldown just because the first coalesced frame recovered.
+        // This prevents mailbox from oscillating:
+        //   severe swap -> one good coalesced frame -> severe swap again.
         rendererSwapPressureScore = 0;
 
         if (rendererPreRedrawCoalesceFrames <= 0)
             rendererPreRedrawCoalesceWaitUs = 0;
-
-        if (rendererMailboxStormFrames <= 0)
-            rendererMailboxStormWaitUs = 0;
     } else if (rendererSwapPressureScore > 0) {
         rendererSwapPressureScore--;
 
         if (rendererPreRedrawCoalesceFrames <= 0)
             rendererPreRedrawCoalesceWaitUs = 0;
-
-        if (rendererMailboxStormFrames <= 0)
-            rendererMailboxStormWaitUs = 0;
     }
 
     if (rendererSwapPressureScore < 0)
         rendererSwapPressureScore = 0;
     else if (rendererSwapPressureScore > RENDERER_PRESSURE_SCORE_MAX)
         rendererSwapPressureScore = RENDERER_PRESSURE_SCORE_MAX;
-
-    // v3.5 storm limiter:
-    // If a severe swap still happens while a pre-redraw coalesce was already applied,
-    // the display/BufferQueue side is likely in a mailbox storm. In that case, stop
-    // trying to fix it by increasing coalesce time and temporarily reduce redraw
-    // submission rate instead.
-    if (appliedCoalesceWaitUs > 0 && swapUs >= RENDERER_SEVERE_SWAP_US) {
-        rendererMailboxStormFrames =
-            swapUs >= RENDERER_VERY_SEVERE_SWAP_US ?
-                RENDERER_STORM_HOLD_FRAMES_VERY_SEVERE :
-                RENDERER_STORM_HOLD_FRAMES;
-
-        rendererMailboxStormWaitUs = RENDERER_STORM_LIMIT_WAIT_US;
-    }
 }
-
-
 
 
 
@@ -792,9 +772,7 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
     int64_t swapUs = 0;
     int64_t preSwapFlushUs = -1;
     int64_t coalesceWaitUs = rendererLastPreRedrawCoalesceWaitUs;
-    int64_t stormWaitUs = rendererLastStormLimitWaitUs;
     rendererLastPreRedrawCoalesceWaitUs = -1;
-    rendererLastStormLimitWaitUs = -1;
     int64_t postSwapTouchUs = postSwapTouchEnabled ? 0 : -1;
     int64_t postSwapWaitUs = postSwapFenceWaitEnabled ? 0 : -1;
     int64_t frameDeltaUs = 0;
@@ -915,7 +893,7 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
             printEglError("Failed to swap buffers", __LINE__);
     }
 
-    rendererUpdateSwapBackpressureGuard(swapBackpressureGuardEnabled, swapUs, coalesceWaitUs);
+    rendererUpdateSwapBackpressureGuard(swapBackpressureGuardEnabled, swapUs);
 
     // Perform a little drawing operation to make sure the next buffer is ready on the next invocation of drawing.
     // In gaming fast mode this is disabled, so eglSwapBuffers() is the only submit point.
@@ -955,10 +933,10 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
 
         rendererPerfFrameNo++;
 
-        if ((rendererPerfFrameNo % 60) == 0 || totalUs > 20000 || swapUs > 12000 || coalesceWaitUs > 0 || stormWaitUs > 0 || rendererPreRedrawCoalesceFrames > 0 || rendererMailboxStormFrames > 0) {
+        if ((rendererPerfFrameNo % 60) == 0 || totalUs > 20000 || swapUs > 12000 || coalesceWaitUs > 0 || rendererPreRedrawCoalesceFrames > 0) {
             log("XloriePerf: frame=%llu mode=%s root_fence_wait=%d post_swap_touch=%d "
                 "post_swap_fence_wait=%d frame_delta_us=%lld root_wait_us=%lld "
-                "swap_us=%lld pre_swap_flush_us=%lld applied_coalesce_wait_us=%lld pending_coalesce_wait_us=%lld pressure_score=%d coalesce_active=%d coalesce_frames=%d coalesced_count=%llu storm_wait_us=%lld storm_active=%d storm_frames=%d storm_count=%llu last_swap_us=%lld post_swap_touch_us=%lld post_swap_wait_us=%lld render_total_us=%lld total_us=%lld",
+                "swap_us=%lld pre_swap_flush_us=%lld applied_coalesce_wait_us=%lld pending_coalesce_wait_us=%lld pressure_score=%d coalesce_active=%d coalesce_frames=%d coalesced_count=%llu last_swap_us=%lld post_swap_touch_us=%lld post_swap_wait_us=%lld render_total_us=%lld total_us=%lld",
                 (unsigned long long) rendererPerfFrameNo,
                 rendererGetPresentModeName(),
                 rootFenceWaitEnabled ? 1 : 0,
@@ -974,10 +952,6 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
                 rendererPreRedrawCoalesceFrames > 0 ? 1 : 0,
                 rendererPreRedrawCoalesceFrames,
                 (unsigned long long) rendererPreRedrawCoalescedCount,
-                (long long) stormWaitUs,
-                rendererMailboxStormFrames > 0 ? 1 : 0,
-                rendererMailboxStormFrames,
-                (unsigned long long) rendererMailboxStormLimitedCount,
                 (long long) rendererBackpressureLastSwapUs,
                 (long long) postSwapTouchUs,
                 (long long) postSwapWaitUs,
@@ -1012,55 +986,24 @@ static inline __always_inline bool rendererShouldWait(bool *waitingForBuffers) {
         return false;
 
     if (state->drawRequested) {
-        int64_t coalesceWaitUs = -1;
-        int64_t stormWaitUs = -1;
-        int64_t waitUs = -1;
-
-        if (rendererPreRedrawCoalesceFrames > 0 && rendererPreRedrawCoalesceWaitUs > 0)
-            coalesceWaitUs = rendererPreRedrawCoalesceWaitUs;
-
-        if (rendererMailboxStormFrames > 0 && rendererMailboxStormWaitUs > 0)
-            stormWaitUs = rendererMailboxStormWaitUs;
-
-        if (coalesceWaitUs > waitUs)
-            waitUs = coalesceWaitUs;
-
-        if (stormWaitUs > waitUs)
-            waitUs = stormWaitUs;
-
-        rendererLastPreRedrawCoalesceWaitUs = coalesceWaitUs;
-        rendererLastStormLimitWaitUs = stormWaitUs;
-
-        if (waitUs > 0) {
+        if (rendererPreRedrawCoalesceFrames > 0 && rendererPreRedrawCoalesceWaitUs > 0) {
+            int64_t waitUs = rendererPreRedrawCoalesceWaitUs;
             struct timespec deadline;
 
             clock_gettime(CLOCK_REALTIME, &deadline);
             rendererTimespecAddUs(&deadline, waitUs);
 
-            if (coalesceWaitUs > 0) {
-                rendererPreRedrawCoalescedCount++;
-                rendererPreRedrawCoalesceFrames--;
-
-                if (rendererPreRedrawCoalesceFrames <= 0)
-                    rendererPreRedrawCoalesceWaitUs = 0;
-            }
-
-            if (stormWaitUs > 0) {
-                rendererMailboxStormLimitedCount++;
-                rendererMailboxStormFrames--;
-
-                if (rendererMailboxStormFrames <= 0)
-                    rendererMailboxStormWaitUs = 0;
-            }
+            rendererLastPreRedrawCoalesceWaitUs = waitUs;
+            rendererPreRedrawCoalescedCount++;
+            rendererPreRedrawCoalesceFrames--;
 
             // Release stateLock while waiting, so incoming draw requests can merge into this redraw.
             pthread_cond_timedwait(&stateCond, &stateLock, &deadline);
         } else {
             rendererLastPreRedrawCoalesceWaitUs = -1;
-            rendererLastStormLimitWaitUs = -1;
         }
 
-        // X server reported drawing changes. Draw the latest coalesced/limited state now.
+        // X server reported drawing changes. Draw the latest coalesced state now.
         return false;
     }
 
