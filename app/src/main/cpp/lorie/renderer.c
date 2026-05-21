@@ -138,6 +138,7 @@ static volatile bool rendererRootFenceWaitEnabled = true;
 static volatile bool presentModeChanged = false;
 static volatile bool rendererOptionsReady = false;
 static uint64_t rendererPerfFrameNo = 0;
+static int64_t rendererLastPerfFrameStartNs = 0;
 static int64_t rendererLastFrameStartNs = 0;
 
 static int64_t rendererNowNs(void) {
@@ -656,9 +657,16 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
     int64_t frameStartNs = rendererPerfLogEnabled ? rendererNowNs() : 0;
     int64_t rootWaitUs = rootFenceWaitEnabled ? 0 : -1;
     int64_t swapUs = 0;
+    int64_t preSwapFlushUs = -1;
     int64_t postSwapTouchUs = postSwapTouchEnabled ? 0 : -1;
     int64_t postSwapWaitUs = postSwapFenceWaitEnabled ? 0 : -1;
     int64_t frameDeltaUs = 0;
+    if (rendererPerfLogEnabled) {
+        if (rendererLastPerfFrameStartNs != 0)
+            frameDeltaUs = rendererNsToUs(frameStartNs - rendererLastPerfFrameStartNs);
+
+        rendererLastPerfFrameStartNs = frameStartNs;
+    }
     // The buffer will not be released until this function ends, but main thread can modify buffer list
     pthread_spin_lock(&bufferLock);
     LorieBuffer *buffer = LorieBufferList_findById(&buffers, state->rootWindowTextureID);
@@ -746,7 +754,29 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
     }
     state->waitForNextFrame = true;
     lorie_mutex_unlock(&state->lock, &state->lockingPid);
-if (rendererPerfLogEnabled) { int64_t swapStartNs = rendererNowNs(); if (eglSwapBuffers(egl_display, sfc) != EGL_TRUE) printEglError("Failed to swap buffers", __LINE__); swapUs = rendererNsToUs(rendererNowNs() - swapStartNs); } else { if (eglSwapBuffers(egl_display, sfc) != EGL_TRUE) printEglError("Failed to swap buffers", __LINE__); }
+// Gaming fast path: submit GL commands before swap without creating or waiting on fences.
+    // This keeps the no-fence fast path but avoids moving all submit work into swap.
+    if (!rootFenceWaitEnabled) {
+        if (rendererPerfLogEnabled) {
+            int64_t preSwapFlushStartNs = rendererNowNs();
+            glFlush();
+            preSwapFlushUs = rendererNsToUs(rendererNowNs() - preSwapFlushStartNs);
+        } else {
+            glFlush();
+        }
+    }
+
+    if (rendererPerfLogEnabled) {
+        int64_t swapStartNs = rendererNowNs();
+
+        if (eglSwapBuffers(egl_display, sfc) != EGL_TRUE)
+            printEglError("Failed to swap buffers", __LINE__);
+
+        swapUs = rendererNsToUs(rendererNowNs() - swapStartNs);
+    } else {
+        if (eglSwapBuffers(egl_display, sfc) != EGL_TRUE)
+            printEglError("Failed to swap buffers", __LINE__);
+    }
 
     // Perform a little drawing operation to make sure the next buffer is ready on the next invocation of drawing.
     // In gaming fast mode this is disabled, so eglSwapBuffers() is the only submit point.
@@ -787,7 +817,7 @@ if (rendererPerfLogEnabled) { int64_t swapStartNs = rendererNowNs(); if (eglSwap
         if ((rendererPerfFrameNo % 60) == 0 || totalUs > 20000 || swapUs > 12000) {
             log("XloriePerf: frame=%llu mode=%s root_fence_wait=%d post_swap_touch=%d "
                 "post_swap_fence_wait=%d frame_delta_us=%lld root_wait_us=%lld "
-                "swap_us=%lld post_swap_touch_us=%lld post_swap_wait_us=%lld total_us=%lld",
+                "swap_us=%lld pre_swap_flush_us=%lld post_swap_touch_us=%lld post_swap_wait_us=%lld total_us=%lld",
                 (unsigned long long) rendererPerfFrameNo,
                 rendererGetPresentModeName(),
                 rootFenceWaitEnabled ? 1 : 0,
@@ -796,6 +826,7 @@ if (rendererPerfLogEnabled) { int64_t swapStartNs = rendererNowNs(); if (eglSwap
                 (long long) frameDeltaUs,
                 (long long) rootWaitUs,
                 (long long) swapUs,
+                (long long) preSwapFlushUs,
                 (long long) postSwapTouchUs,
                 (long long) postSwapWaitUs,
                 (long long) totalUs);
