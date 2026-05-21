@@ -155,8 +155,8 @@ static int64_t rendererBackpressureLastSwapUs = 0;
 #define RENDERER_RECOVERED_SWAP_US 8000
 #define RENDERER_PRESSURE_SCORE_MAX 6
 #define RENDERER_COALESCE_WAIT_PRESEVERE_US 1000
-#define RENDERER_COALESCE_WAIT_SEVERE_US 2000
-#define RENDERER_COALESCE_WAIT_VERY_SEVERE_US 3000
+#define RENDERER_COALESCE_WAIT_SEVERE_US 3000
+#define RENDERER_COALESCE_WAIT_VERY_SEVERE_US 4000
 static int64_t rendererLastFrameStartNs = 0;
 
 static int64_t rendererNowNs(void) {
@@ -688,18 +688,20 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs) {
     rendererBackpressureLastSwapUs = swapUs;
 
     if (swapUs >= RENDERER_VERY_SEVERE_SWAP_US) {
-        // Very severe swap: give the queue a slightly longer recovery window.
+        // v3.4: very severe swap needs a stronger sticky cooldown.
+        // This path is expected to be mailbox-only in normal DeX 60Hz use.
         rendererSwapPressureScore = RENDERER_PRESSURE_SCORE_MAX;
         rendererPreRedrawCoalesceFrames = 3;
         rendererPreRedrawCoalesceWaitUs = RENDERER_COALESCE_WAIT_VERY_SEVERE_US;
     } else if (swapUs >= RENDERER_SEVERE_SWAP_US) {
-        // Severe swap: react clearly, but keep it short.
+        // v3.4: 20~25ms severe swaps were still repeating with 2000us.
+        // Use 3000us and keep it sticky for 3 redraws.
         if (rendererSwapPressureScore < 4)
             rendererSwapPressureScore = 4;
         else
             rendererSwapPressureScore++;
 
-        rendererPreRedrawCoalesceFrames = 2;
+        rendererPreRedrawCoalesceFrames = 3;
         rendererPreRedrawCoalesceWaitUs = RENDERER_COALESCE_WAIT_SEVERE_US;
     } else if (swapUs >= RENDERER_PRESEVERE_SWAP_US) {
         // 18~20ms is a warning zone. Do one light coalesce to avoid crossing into very severe.
