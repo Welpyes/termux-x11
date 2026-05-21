@@ -140,16 +140,21 @@ static volatile bool presentModeChanged = false;
 static volatile bool rendererOptionsReady = false;
 static uint64_t rendererPerfFrameNo = 0;
 static int64_t rendererLastPerfFrameStartNs = 0;
-static int rendererSlowSwapStreak = 0;
+static int rendererSwapPressureScore = 0;
 static int rendererBackpressureFrames = 0;
+static int rendererBackpressureSevereFrames = 0;
 static uint64_t rendererBackpressurePacingCount = 0;
 static int64_t rendererBackpressureLastSwapUs = 0;
 
+#define RENDERER_MEDIUM_SWAP_US 8000
 #define RENDERER_SLOW_SWAP_US 12000
 #define RENDERER_SEVERE_SWAP_US 20000
 #define RENDERER_RECOVERED_SWAP_US 6000
-#define RENDERER_BACKPRESSURE_HOLD_FRAMES 8
-
+#define RENDERER_VERY_GOOD_SWAP_US 3000
+#define RENDERER_PRESSURE_SCORE_MAX 12
+#define RENDERER_BACKPRESSURE_HOLD_FRAMES 6
+#define RENDERER_SEVERE_BACKPRESSURE_HOLD_FRAMES 10
+#define RENDERER_SEVERE_BOOST_FRAMES 2
 static int64_t rendererLastFrameStartNs = 0;
 
 static int64_t rendererNowNs(void) {
@@ -661,41 +666,68 @@ static void drawCursor(float displayWidth, float displayHeight);
 
 static int64_t rendererApplySwapBackpressureGuard(bool enabled, int64_t swapUs) {
     if (!enabled) {
-        rendererSlowSwapStreak = 0;
+        rendererSwapPressureScore = 0;
         rendererBackpressureFrames = 0;
+        rendererBackpressureSevereFrames = 0;
         rendererBackpressureLastSwapUs = swapUs;
         return -1;
     }
 
     rendererBackpressureLastSwapUs = swapUs;
 
-    if (swapUs >= RENDERER_SEVERE_SWAP_US)
-        rendererSlowSwapStreak += 2;
-    else if (swapUs >= RENDERER_SLOW_SWAP_US)
-        rendererSlowSwapStreak++;
-    else if (swapUs <= RENDERER_RECOVERED_SWAP_US)
-        rendererSlowSwapStreak = 0;
-    else if (rendererSlowSwapStreak > 0)
-        rendererSlowSwapStreak--;
+    if (swapUs >= RENDERER_SEVERE_SWAP_US) {
+        rendererSwapPressureScore += 4;
+        rendererBackpressureSevereFrames = RENDERER_SEVERE_BOOST_FRAMES;
+        if (rendererBackpressureFrames < RENDERER_SEVERE_BACKPRESSURE_HOLD_FRAMES)
+            rendererBackpressureFrames = RENDERER_SEVERE_BACKPRESSURE_HOLD_FRAMES;
+    } else if (swapUs >= RENDERER_SLOW_SWAP_US) {
+        rendererSwapPressureScore += 2;
+        if (rendererSwapPressureScore >= 4 &&
+                rendererBackpressureFrames < RENDERER_BACKPRESSURE_HOLD_FRAMES)
+            rendererBackpressureFrames = RENDERER_BACKPRESSURE_HOLD_FRAMES;
+    } else if (swapUs >= RENDERER_MEDIUM_SWAP_US) {
+        rendererSwapPressureScore += 1;
+        if (rendererSwapPressureScore >= 6 && rendererBackpressureFrames < 4)
+            rendererBackpressureFrames = 4;
+    } else if (swapUs <= RENDERER_VERY_GOOD_SWAP_US) {
+        rendererSwapPressureScore -= 2;
+    } else if (swapUs <= RENDERER_RECOVERED_SWAP_US) {
+        rendererSwapPressureScore -= 1;
+    } else if (rendererSwapPressureScore > 0) {
+        rendererSwapPressureScore -= 1;
+    }
 
-    if (rendererSlowSwapStreak > 8)
-        rendererSlowSwapStreak = 8;
-
-    if (rendererSlowSwapStreak >= 2)
-        rendererBackpressureFrames = RENDERER_BACKPRESSURE_HOLD_FRAMES;
-    else if (rendererBackpressureFrames > 0)
-        rendererBackpressureFrames--;
+    if (rendererSwapPressureScore < 0)
+        rendererSwapPressureScore = 0;
+    else if (rendererSwapPressureScore > RENDERER_PRESSURE_SCORE_MAX)
+        rendererSwapPressureScore = RENDERER_PRESSURE_SCORE_MAX;
 
     if (rendererBackpressureFrames <= 0)
         return -1;
 
-    int64_t sleepUs = (swapUs >= RENDERER_SEVERE_SWAP_US || rendererSlowSwapStreak >= 4) ? 1500 : 750;
+    int64_t sleepUs;
+
+    if (rendererBackpressureSevereFrames > 0) {
+        sleepUs = 1000;
+        rendererBackpressureSevereFrames--;
+    } else if (rendererSwapPressureScore >= 8) {
+        sleepUs = 750;
+    } else if (rendererSwapPressureScore >= 4) {
+        sleepUs = 500;
+    } else {
+        sleepUs = 250;
+    }
 
     rendererBackpressurePacingCount++;
     usleep((unsigned int) sleepUs);
 
+    if (rendererBackpressureFrames > 0)
+        rendererBackpressureFrames--;
+
     return sleepUs;
 }
+
+
 
 void rendererRedrawLocked(bool* waitingForBuffers) {
     float xfactor = 1.f;
@@ -866,12 +898,17 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
 
     if (rendererPerfLogEnabled) {
         int64_t totalUs = rendererNsToUs(rendererNowNs() - frameStartNs);
+        int64_t renderTotalUs = totalUs;
+
+        if (backpressureSleepUs > 0 && renderTotalUs > backpressureSleepUs)
+            renderTotalUs -= backpressureSleepUs;
+
         rendererPerfFrameNo++;
 
         if ((rendererPerfFrameNo % 60) == 0 || totalUs > 20000 || swapUs > 12000) {
             log("XloriePerf: frame=%llu mode=%s root_fence_wait=%d post_swap_touch=%d "
                 "post_swap_fence_wait=%d frame_delta_us=%lld root_wait_us=%lld "
-                "swap_us=%lld pre_swap_flush_us=%lld backpressure_sleep_us=%lld slow_swap_streak=%d backpressure_active=%d backpressure_frames=%d backpressure_count=%llu post_swap_touch_us=%lld post_swap_wait_us=%lld total_us=%lld",
+                "swap_us=%lld pre_swap_flush_us=%lld backpressure_sleep_us=%lld pressure_score=%d severe_frames=%d backpressure_active=%d backpressure_frames=%d backpressure_count=%llu post_swap_touch_us=%lld post_swap_wait_us=%lld render_total_us=%lld total_us=%lld",
                 (unsigned long long) rendererPerfFrameNo,
                 rendererGetPresentModeName(),
                 rootFenceWaitEnabled ? 1 : 0,
@@ -882,12 +919,14 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
                 (long long) swapUs,
                 (long long) preSwapFlushUs,
                 (long long) backpressureSleepUs,
-                rendererSlowSwapStreak,
+                rendererSwapPressureScore,
+                rendererBackpressureSevereFrames,
                 rendererBackpressureFrames > 0 ? 1 : 0,
                 rendererBackpressureFrames,
                 (unsigned long long) rendererBackpressurePacingCount,
                 (long long) postSwapTouchUs,
                 (long long) postSwapWaitUs,
+                (long long) renderTotalUs,
                 (long long) totalUs);
         }
     }
