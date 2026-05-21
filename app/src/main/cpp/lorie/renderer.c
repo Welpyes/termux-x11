@@ -25,6 +25,7 @@
 #include "list.h"
 #include "lorie.h"
 
+#include <unistd.h>
 #define log(...) __android_log_print(ANDROID_LOG_DEBUG, "gles-renderer", __VA_ARGS__)
 #define loge(...) __android_log_print(ANDROID_LOG_ERROR, "gles-renderer", __VA_ARGS__)
 
@@ -139,6 +140,16 @@ static volatile bool presentModeChanged = false;
 static volatile bool rendererOptionsReady = false;
 static uint64_t rendererPerfFrameNo = 0;
 static int64_t rendererLastPerfFrameStartNs = 0;
+static int rendererSlowSwapStreak = 0;
+static int rendererBackpressureFrames = 0;
+static uint64_t rendererBackpressurePacingCount = 0;
+static int64_t rendererBackpressureLastSwapUs = 0;
+
+#define RENDERER_SLOW_SWAP_US 12000
+#define RENDERER_SEVERE_SWAP_US 20000
+#define RENDERER_RECOVERED_SWAP_US 6000
+#define RENDERER_BACKPRESSURE_HOLD_FRAMES 8
+
 static int64_t rendererLastFrameStartNs = 0;
 
 static int64_t rendererNowNs(void) {
@@ -647,6 +658,45 @@ void rendererRefreshContext(void) {
 static void draw(GLuint id, float x0, float y0, float x1, float y1, float xfactor, uint8_t flip);
 static void drawCursor(float displayWidth, float displayHeight);
 
+
+static int64_t rendererApplySwapBackpressureGuard(bool enabled, int64_t swapUs) {
+    if (!enabled) {
+        rendererSlowSwapStreak = 0;
+        rendererBackpressureFrames = 0;
+        rendererBackpressureLastSwapUs = swapUs;
+        return -1;
+    }
+
+    rendererBackpressureLastSwapUs = swapUs;
+
+    if (swapUs >= RENDERER_SEVERE_SWAP_US)
+        rendererSlowSwapStreak += 2;
+    else if (swapUs >= RENDERER_SLOW_SWAP_US)
+        rendererSlowSwapStreak++;
+    else if (swapUs <= RENDERER_RECOVERED_SWAP_US)
+        rendererSlowSwapStreak = 0;
+    else if (rendererSlowSwapStreak > 0)
+        rendererSlowSwapStreak--;
+
+    if (rendererSlowSwapStreak > 8)
+        rendererSlowSwapStreak = 8;
+
+    if (rendererSlowSwapStreak >= 2)
+        rendererBackpressureFrames = RENDERER_BACKPRESSURE_HOLD_FRAMES;
+    else if (rendererBackpressureFrames > 0)
+        rendererBackpressureFrames--;
+
+    if (rendererBackpressureFrames <= 0)
+        return -1;
+
+    int64_t sleepUs = (swapUs >= RENDERER_SEVERE_SWAP_US || rendererSlowSwapStreak >= 4) ? 1500 : 750;
+
+    rendererBackpressurePacingCount++;
+    usleep((unsigned int) sleepUs);
+
+    return sleepUs;
+}
+
 void rendererRedrawLocked(bool* waitingForBuffers) {
     float xfactor = 1.f;
     LorieBuffer_Desc *desc = NULL;
@@ -654,10 +704,12 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
     bool rootFenceWaitEnabled = rendererRootFenceWaitEnabled;
     bool postSwapTouchEnabled = rendererPostSwapTouchEnabled;
     bool postSwapFenceWaitEnabled = postSwapTouchEnabled && rendererPostSwapFenceWaitEnabled;
+    bool swapBackpressureGuardEnabled = !rootFenceWaitEnabled && !postSwapTouchEnabled && !postSwapFenceWaitEnabled;
     int64_t frameStartNs = rendererPerfLogEnabled ? rendererNowNs() : 0;
     int64_t rootWaitUs = rootFenceWaitEnabled ? 0 : -1;
     int64_t swapUs = 0;
     int64_t preSwapFlushUs = -1;
+    int64_t backpressureSleepUs = -1;
     int64_t postSwapTouchUs = postSwapTouchEnabled ? 0 : -1;
     int64_t postSwapWaitUs = postSwapFenceWaitEnabled ? 0 : -1;
     int64_t frameDeltaUs = 0;
@@ -778,6 +830,8 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
             printEglError("Failed to swap buffers", __LINE__);
     }
 
+    backpressureSleepUs = rendererApplySwapBackpressureGuard(swapBackpressureGuardEnabled, swapUs);
+
     // Perform a little drawing operation to make sure the next buffer is ready on the next invocation of drawing.
     // In gaming fast mode this is disabled, so eglSwapBuffers() is the only submit point.
     if (postSwapTouchEnabled) {
@@ -817,7 +871,7 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
         if ((rendererPerfFrameNo % 60) == 0 || totalUs > 20000 || swapUs > 12000) {
             log("XloriePerf: frame=%llu mode=%s root_fence_wait=%d post_swap_touch=%d "
                 "post_swap_fence_wait=%d frame_delta_us=%lld root_wait_us=%lld "
-                "swap_us=%lld pre_swap_flush_us=%lld post_swap_touch_us=%lld post_swap_wait_us=%lld total_us=%lld",
+                "swap_us=%lld pre_swap_flush_us=%lld backpressure_sleep_us=%lld slow_swap_streak=%d backpressure_active=%d backpressure_frames=%d backpressure_count=%llu post_swap_touch_us=%lld post_swap_wait_us=%lld total_us=%lld",
                 (unsigned long long) rendererPerfFrameNo,
                 rendererGetPresentModeName(),
                 rootFenceWaitEnabled ? 1 : 0,
@@ -827,6 +881,11 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
                 (long long) rootWaitUs,
                 (long long) swapUs,
                 (long long) preSwapFlushUs,
+                (long long) backpressureSleepUs,
+                rendererSlowSwapStreak,
+                rendererBackpressureFrames > 0 ? 1 : 0,
+                rendererBackpressureFrames,
+                (unsigned long long) rendererBackpressurePacingCount,
                 (long long) postSwapTouchUs,
                 (long long) postSwapWaitUs,
                 (long long) totalUs);
