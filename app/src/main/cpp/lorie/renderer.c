@@ -138,6 +138,9 @@ static volatile bool rendererRootFenceWaitEnabled = true;
 static volatile bool rendererVsyncCoalescingEnabled = false;
 static volatile uint64_t rendererVsyncSerial = 0;
 static volatile uint64_t rendererConsumedVsyncSerial = 0;
+static volatile uint64_t rendererVsyncSignalCount = 0;
+static volatile uint64_t rendererVsyncDrawCount = 0;
+static volatile uint64_t rendererVsyncWaitCount = 0;
 static volatile int64_t rendererLastVsyncFrameTimeNs = 0;
 static EGLBoolean (*rendererPresentationTimeANDROID)(EGLDisplay display, EGLSurface surface, EGLnsecsANDROID time) = NULL;
 static bool rendererPresentationTimeAvailable = false;
@@ -395,20 +398,31 @@ void rendererSetRootFenceWaitEnabled(JNIEnv* env, jobject self, jboolean enabled
     rendererRootFenceWaitEnabled = enabled == JNI_TRUE;
 }
 
+
 void rendererSetVsyncCoalescingEnabled(JNIEnv* env, jobject self, jboolean enabled) {
     (void) env;
     (void) self;
 
+    bool newEnabled = enabled == JNI_TRUE;
+    bool oldEnabled;
+
     pthread_mutex_lock(&stateLock);
-    rendererVsyncCoalescingEnabled = enabled == JNI_TRUE;
+    oldEnabled = rendererVsyncCoalescingEnabled;
+    rendererVsyncCoalescingEnabled = newEnabled;
     rendererVsyncSerial = 0;
     rendererConsumedVsyncSerial = 0;
     rendererLastVsyncFrameTimeNs = 0;
+    rendererVsyncSignalCount = 0;
+    rendererVsyncDrawCount = 0;
+    rendererVsyncWaitCount = 0;
     pthread_cond_signal(&stateCond);
     pthread_mutex_unlock(&stateLock);
 
-    log("Xlorie: vsync coalescing enabled=%d", rendererVsyncCoalescingEnabled ? 1 : 0);
+    log("Xlorie: vsync coalescing enabled=%d previous=%d",
+        newEnabled ? 1 : 0,
+        oldEnabled ? 1 : 0);
 }
+
 
 void rendererOnVsync(JNIEnv* env, jobject self, jlong frameTimeNanos) {
     (void) env;
@@ -417,11 +431,25 @@ void rendererOnVsync(JNIEnv* env, jobject self, jlong frameTimeNanos) {
     if (!rendererVsyncCoalescingEnabled)
         return;
 
+    uint64_t serial;
+    uint64_t signalCount;
+    int64_t frameTimeNs = (int64_t) frameTimeNanos;
+
     pthread_mutex_lock(&stateLock);
-    rendererLastVsyncFrameTimeNs = (int64_t) frameTimeNanos;
+    rendererLastVsyncFrameTimeNs = frameTimeNs;
     rendererVsyncSerial++;
+    rendererVsyncSignalCount++;
+    serial = rendererVsyncSerial;
+    signalCount = rendererVsyncSignalCount;
     pthread_cond_signal(&stateCond);
     pthread_mutex_unlock(&stateLock);
+
+    if (signalCount == 1 || (signalCount % 300) == 0) {
+        log("Xlorie: vsync callback alive serial=%llu signals=%llu frame_time_ns=%lld",
+            (unsigned long long) serial,
+            (unsigned long long) signalCount,
+            (long long) frameTimeNs);
+    }
 }
 
 
@@ -811,7 +839,22 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
         rendererPerfFrameNo++;
 
         if ((rendererPerfFrameNo % 60) == 0 || totalUs > 20000 || swapUs > 12000) {
-            log("XloriePerf: frame=%llu mode=%s root_fence_wait=%d post_swap_touch=%d post_swap_fence_wait=%d frame_delta_us=%lld root_wait_us=%lld swap_us=%lld post_swap_touch_us=%lld post_swap_wait_us=%lld total_us=%lld",
+                        log("XloriePerfVsync: frame=%llu vsync_coalescing=%d "
+                            "vsync_serial=%llu consumed_vsync_serial=%llu vsync_pending=%d "
+                            "vsync_signals=%llu vsync_draws=%llu vsync_waits=%llu "
+                            "presentation_time=%d last_vsync_frame_time_ns=%lld",
+                            (unsigned long long) rendererPerfFrameNo,
+                            rendererVsyncCoalescingEnabled ? 1 : 0,
+                            (unsigned long long) rendererVsyncSerial,
+                            (unsigned long long) rendererConsumedVsyncSerial,
+                            rendererVsyncSerial != rendererConsumedVsyncSerial ? 1 : 0,
+                            (unsigned long long) rendererVsyncSignalCount,
+                            (unsigned long long) rendererVsyncDrawCount,
+                            (unsigned long long) rendererVsyncWaitCount,
+                            rendererPresentationTimeAvailable ? 1 : 0,
+                            (long long) rendererLastVsyncFrameTimeNs);
+
+                        log("XloriePerf: frame=%llu mode=%s root_fence_wait=%d post_swap_touch=%d post_swap_fence_wait=%d frame_delta_us=%lld root_wait_us=%lld swap_us=%lld post_swap_touch_us=%lld post_swap_wait_us=%lld total_us=%lld",
                 (unsigned long long) rendererPerfFrameNo,
                 rendererGetPresentModeName(),
                 rendererRootFenceWaitEnabled ? 1 : 0,
@@ -852,8 +895,10 @@ static inline __always_inline bool rendererShouldWait(bool *waitingForBuffers) {
         // In gaming fast mode, coalesce them until the next Android VSYNC callback.
         if (rendererVsyncCoalescingEnabled &&
             rendererLastVsyncFrameTimeNs != 0 &&
-            rendererVsyncSerial == rendererConsumedVsyncSerial)
+            rendererVsyncSerial == rendererConsumedVsyncSerial) {
+            rendererVsyncWaitCount++;
             return true;
+        }
 
         return false;
     }
@@ -907,8 +952,10 @@ __noreturn static void* rendererThread(void) {
 
         if (state && state->surfaceAvailable && !state->waitForNextFrame &&
             (state->drawRequested || state->cursor.moved || state->cursor.updated)) {
-            if (rendererVsyncCoalescingEnabled)
+            if (rendererVsyncCoalescingEnabled) {
                 rendererConsumedVsyncSerial = rendererVsyncSerial;
+                rendererVsyncDrawCount++;
+            }
 
             rendererRedrawLocked(&waitingForBuffers);
         }

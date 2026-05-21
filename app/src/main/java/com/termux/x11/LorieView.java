@@ -347,6 +347,7 @@ public class LorieView extends SurfaceView implements InputStub {
     private Callback mCallback; private boolean desktopModeOutputProfileActive = false;
 
 private boolean rendererVsyncCallbackEnabled = false;
+private final android.os.Handler rendererVsyncHandler = new android.os.Handler(android.os.Looper.getMainLooper());
 private final android.view.Choreographer.FrameCallback rendererVsyncCallback = new android.view.Choreographer.FrameCallback() {
     @Override
     public void doFrame(long frameTimeNanos) {
@@ -357,17 +358,33 @@ private final android.view.Choreographer.FrameCallback rendererVsyncCallback = n
     }
 };
 
+
 private void setRendererVsyncCallbackEnabled(boolean enabled) {
+    if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+        rendererVsyncHandler.post(() -> setRendererVsyncCallbackEnabled(enabled));
+        return;
+    }
+
     if (rendererVsyncCallbackEnabled == enabled)
         return;
 
     rendererVsyncCallbackEnabled = enabled;
+
     android.view.Choreographer choreographer = android.view.Choreographer.getInstance();
     choreographer.removeFrameCallback(rendererVsyncCallback);
 
     if (enabled)
         choreographer.postFrameCallback(rendererVsyncCallback);
+
+    android.util.Log.d("LorieView", "renderer vsync callback enabled=" + enabled);
 }
+
+private void configureRendererVsyncCoalescing(boolean enabled) {
+    android.util.Log.d("LorieView", "renderer vsync coalescing request=" + enabled);
+    setVsyncCoalescingEnabled(enabled);
+    setRendererVsyncCallbackEnabled(enabled);
+}
+
 
     private final Point p = new Point();
     private final Rect contentInsets = new Rect();
@@ -872,8 +889,7 @@ setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.
 setRendererPerfLogEnabled(p.get().getBoolean("rendererPerfLog", false));
     String rendererOutputMode = p.get().getString("rendererOutputMode", "compat");
     boolean rendererGamingFast = "gaming_fast".equals(rendererOutputMode);
-    setVsyncCoalescingEnabled(rendererGamingFast);
-    setRendererVsyncCallbackEnabled(rendererGamingFast);
+    configureRendererVsyncCoalescing(rendererGamingFast);
 
     if (rendererGamingFast) {
         setSmoothPresentationEnabled(false);
