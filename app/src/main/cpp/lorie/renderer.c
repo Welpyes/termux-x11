@@ -149,10 +149,12 @@ static int64_t rendererBackpressureLastSwapUs = 0;
 
 #define RENDERER_MEDIUM_SWAP_US 8000
 #define RENDERER_SLOW_SWAP_US 12000
+#define RENDERER_PRESEVERE_SWAP_US 18000
 #define RENDERER_SEVERE_SWAP_US 20000
 #define RENDERER_VERY_SEVERE_SWAP_US 25000
-#define RENDERER_RECOVERED_SWAP_US 6000
+#define RENDERER_RECOVERED_SWAP_US 8000
 #define RENDERER_PRESSURE_SCORE_MAX 6
+#define RENDERER_COALESCE_WAIT_PRESEVERE_US 1000
 #define RENDERER_COALESCE_WAIT_SEVERE_US 2000
 #define RENDERER_COALESCE_WAIT_VERY_SEVERE_US 3000
 static int64_t rendererLastFrameStartNs = 0;
@@ -686,10 +688,12 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs) {
     rendererBackpressureLastSwapUs = swapUs;
 
     if (swapUs >= RENDERER_VERY_SEVERE_SWAP_US) {
+        // Very severe swap: give the queue a slightly longer recovery window.
         rendererSwapPressureScore = RENDERER_PRESSURE_SCORE_MAX;
-        rendererPreRedrawCoalesceFrames = 2;
+        rendererPreRedrawCoalesceFrames = 3;
         rendererPreRedrawCoalesceWaitUs = RENDERER_COALESCE_WAIT_VERY_SEVERE_US;
     } else if (swapUs >= RENDERER_SEVERE_SWAP_US) {
+        // Severe swap: react clearly, but keep it short.
         if (rendererSwapPressureScore < 4)
             rendererSwapPressureScore = 4;
         else
@@ -697,21 +701,31 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs) {
 
         rendererPreRedrawCoalesceFrames = 2;
         rendererPreRedrawCoalesceWaitUs = RENDERER_COALESCE_WAIT_SEVERE_US;
+    } else if (swapUs >= RENDERER_PRESEVERE_SWAP_US) {
+        // 18~20ms is a warning zone. Do one light coalesce to avoid crossing into very severe.
+        if (rendererSwapPressureScore < 2)
+            rendererSwapPressureScore = 2;
+
+        if (rendererPreRedrawCoalesceFrames < 1)
+            rendererPreRedrawCoalesceFrames = 1;
+
+        rendererPreRedrawCoalesceWaitUs = RENDERER_COALESCE_WAIT_PRESEVERE_US;
     } else if (swapUs >= RENDERER_SLOW_SWAP_US) {
-        // Ordinary 12~20ms swaps are common on both mailbox and non-mailbox.
-        // Track them lightly, but do not arm coalescing unless a real severe swap appears.
-        if (rendererSwapPressureScore < 3)
-            rendererSwapPressureScore++;
+        // Ordinary 12~18ms swaps are common. Track lightly, but do not arm coalescing.
+        if (rendererSwapPressureScore < 1)
+            rendererSwapPressureScore = 1;
 
         if (rendererPreRedrawCoalesceFrames <= 0)
             rendererPreRedrawCoalesceWaitUs = 0;
     } else if (swapUs >= RENDERER_MEDIUM_SWAP_US) {
+        // Medium swaps should not keep pressure around for long.
         if (rendererSwapPressureScore > 0)
             rendererSwapPressureScore--;
 
         if (rendererPreRedrawCoalesceFrames <= 0)
             rendererPreRedrawCoalesceWaitUs = 0;
     } else if (swapUs <= RENDERER_RECOVERED_SWAP_US) {
+        // Fast recovery: non-mailbox should stay untouched and mailbox should return to normal quickly.
         rendererSwapPressureScore = 0;
         rendererPreRedrawCoalesceFrames = 0;
         rendererPreRedrawCoalesceWaitUs = 0;
@@ -727,6 +741,8 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs) {
     else if (rendererSwapPressureScore > RENDERER_PRESSURE_SCORE_MAX)
         rendererSwapPressureScore = RENDERER_PRESSURE_SCORE_MAX;
 }
+
+
 
 
 
@@ -908,7 +924,7 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
 
         rendererPerfFrameNo++;
 
-        if ((rendererPerfFrameNo % 60) == 0 || totalUs > 20000 || swapUs > 12000) {
+        if ((rendererPerfFrameNo % 60) == 0 || totalUs > 20000 || swapUs > 12000 || coalesceWaitUs > 0 || rendererPreRedrawCoalesceFrames > 0) {
             log("XloriePerf: frame=%llu mode=%s root_fence_wait=%d post_swap_touch=%d "
                 "post_swap_fence_wait=%d frame_delta_us=%lld root_wait_us=%lld "
                 "swap_us=%lld pre_swap_flush_us=%lld applied_coalesce_wait_us=%lld pending_coalesce_wait_us=%lld pressure_score=%d coalesce_active=%d coalesce_frames=%d coalesced_count=%llu last_swap_us=%lld post_swap_touch_us=%lld post_swap_wait_us=%lld render_total_us=%lld total_us=%lld",
