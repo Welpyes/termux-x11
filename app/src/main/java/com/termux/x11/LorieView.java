@@ -971,9 +971,17 @@ hardwareKbdScancodesWorkaround = p.hardwareKbdScancodesWorkaround.get();
             mIMM.restartInput(this);
     }
 
-    private void requestRendererSurfaceFrameRate(float refreshRate) {
+private void requestRendererSurfaceFrameRate(float refreshRate) {
     if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R)
         return;
+
+    // v3.13:
+    // Keep v3.12A on on-screen 90Hz+ output.
+    // Restore the v3.7-style DeX/60Hz path by not requesting Surface frame rate.
+    if (refreshRate < 90.0f) {
+        android.util.Log.d("LorieView", "v3.13 skipped surface frame rate request for low refresh " + refreshRate);
+        return;
+    }
 
     try {
         android.view.Surface surface = getHolder() != null ? getHolder().getSurface() : null;
@@ -986,10 +994,12 @@ hardwareKbdScancodesWorkaround = p.hardwareKbdScancodesWorkaround.get();
                 android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT,
                 android.view.Surface.CHANGE_FRAME_RATE_ALWAYS);
 
-        android.util.Log.d("LorieView", "v3.12A requested surface frame rate DEFAULT ALWAYS " + refreshRate);
+        android.util.Log.d("LorieView", "v3.13 requested surface frame rate DEFAULT ALWAYS " + refreshRate);
     } catch (Throwable ignored) {
     }
 }
+
+
 
 private void updateRendererDisplayRefreshRate() {
     float refreshRate = 60.0f;
