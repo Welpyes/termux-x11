@@ -189,10 +189,18 @@ static uint64_t rendererHighRefreshLimitedCount = 0;
 #define RENDERER_ONSCREEN_SPIKE_FRAMES 1
 #endif
 #ifndef RENDERER_ONSCREEN_SPIKE_COOLDOWN_FRAMES
-#define RENDERER_ONSCREEN_SPIKE_COOLDOWN_FRAMES 90
+#define RENDERER_ONSCREEN_SPIKE_COOLDOWN_FRAMES 60
+#endif
+#ifndef RENDERER_ONSCREEN_BURST_WINDOW_FRAMES
+#define RENDERER_ONSCREEN_BURST_WINDOW_FRAMES 24
+#endif
+#ifndef RENDERER_ONSCREEN_BURST_MAX_ARMS
+#define RENDERER_ONSCREEN_BURST_MAX_ARMS 3
 #endif
 static int rendererDexRecoveryCooldownFrames = 0;
 static int rendererOnscreenSpikeCooldownFrames = 0;
+static int rendererOnscreenSpikeWindowFrames = 0;
+static int rendererOnscreenSpikeArmsInWindow = 0;
 #define RENDERER_HR_PLATEAU_SWAP_US 12000
 #define RENDERER_HR_SEVERE_SWAP_US 15000
 #define RENDERER_HR_VERY_SEVERE_SWAP_US 18000
@@ -896,27 +904,52 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, in
     }
     /* v3.15-dex-burst-end */
 
-    /* v3.16-onscreen-spike-begin */
-    // v3.16 high-refresh single-spike smoother:
-    // Keep 90Hz+ output latency-first by default. If eglSwapBuffers has
-    // a one-off severe spike, schedule only one tiny 0.5ms settle frame,
-    // then cool down so this cannot become a coalesce loop.
+    /* v3.17-onscreen-burst-begin */
+    // v3.17 high-refresh burst-window smoother:
+    // v3.16 handled one-off swap spikes, but the cooldown was too strict
+    // for short repeated 120Hz BufferQueue bursts. Allow up to 3 tiny 0.5ms
+    // settle frames inside a short window, then enter cooldown to avoid loops.
     if (!rendererHighRefreshEnabled) {
         rendererOnscreenSpikeCooldownFrames = 0;
+        rendererOnscreenSpikeWindowFrames = 0;
+        rendererOnscreenSpikeArmsInWindow = 0;
     } else {
         if (rendererOnscreenSpikeCooldownFrames > 0)
             rendererOnscreenSpikeCooldownFrames--;
 
+        if (rendererOnscreenSpikeWindowFrames > 0) {
+            rendererOnscreenSpikeWindowFrames--;
+            if (rendererOnscreenSpikeWindowFrames == 0)
+                rendererOnscreenSpikeArmsInWindow = 0;
+        }
+
         if (swapUs >= RENDERER_ONSCREEN_SPIKE_SWAP_US &&
             rendererOnscreenSpikeCooldownFrames <= 0 &&
             rendererPreRedrawCoalesceWaitUs <= 0) {
-            rendererPreRedrawCoalesceFrames = RENDERER_ONSCREEN_SPIKE_FRAMES;
-            rendererPreRedrawCoalesceWaitUs = RENDERER_ONSCREEN_SPIKE_WAIT_US;
-            rendererOnscreenSpikeCooldownFrames = RENDERER_ONSCREEN_SPIKE_COOLDOWN_FRAMES;
+
+            if (rendererOnscreenSpikeWindowFrames <= 0) {
+                rendererOnscreenSpikeWindowFrames = RENDERER_ONSCREEN_BURST_WINDOW_FRAMES;
+                rendererOnscreenSpikeArmsInWindow = 0;
+            }
+
+            if (rendererOnscreenSpikeArmsInWindow < RENDERER_ONSCREEN_BURST_MAX_ARMS) {
+                rendererPreRedrawCoalesceFrames = RENDERER_ONSCREEN_SPIKE_FRAMES;
+                rendererPreRedrawCoalesceWaitUs = RENDERER_ONSCREEN_SPIKE_WAIT_US;
+                rendererOnscreenSpikeArmsInWindow++;
+
+                if (rendererOnscreenSpikeArmsInWindow >= RENDERER_ONSCREEN_BURST_MAX_ARMS) {
+                    rendererOnscreenSpikeCooldownFrames = RENDERER_ONSCREEN_SPIKE_COOLDOWN_FRAMES;
+                    rendererOnscreenSpikeWindowFrames = 0;
+                    rendererOnscreenSpikeArmsInWindow = 0;
+                }
+            } else {
+                rendererOnscreenSpikeCooldownFrames = RENDERER_ONSCREEN_SPIKE_COOLDOWN_FRAMES;
+                rendererOnscreenSpikeWindowFrames = 0;
+                rendererOnscreenSpikeArmsInWindow = 0;
+            }
         }
     }
-    /* v3.16-onscreen-spike-end */
-
+    /* v3.17-onscreen-burst-end */
 
 rendererUpdateHighRefreshPlateauLimiter(enabled, swapUs, totalUs);
 }
