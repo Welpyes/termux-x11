@@ -1007,7 +1007,8 @@ private void updateRendererDisplayRefreshRate() {
         refreshRate = 60.0f;
 
     rendererSetDisplayRefreshRate(refreshRate);
-    requestRendererSurfaceFrameRate(refreshRate);
+    // v3.10A: disabled for comparison. Do not request Surface frame rate here.
+    android.util.Log.d("LorieView", "v3.10A Surface frame rate request disabled; display refresh " + refreshRate);
 }
 
 @FastNative private native void rendererSetDisplayRefreshRate(float refreshRate);
