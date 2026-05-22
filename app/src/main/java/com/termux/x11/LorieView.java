@@ -984,9 +984,9 @@ hardwareKbdScancodesWorkaround = p.hardwareKbdScancodesWorkaround.get();
         surface.setFrameRate(
                 refreshRate,
                 android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT,
-                android.view.Surface.CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS);
+                android.view.Surface.CHANGE_FRAME_RATE_ALWAYS);
 
-        android.util.Log.d("LorieView", "v3.10B requested surface frame rate DEFAULT " + refreshRate);
+        android.util.Log.d("LorieView", "v3.12A requested surface frame rate DEFAULT ALWAYS " + refreshRate);
     } catch (Throwable ignored) {
     }
 }
