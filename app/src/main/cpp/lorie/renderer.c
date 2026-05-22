@@ -166,6 +166,15 @@ static uint64_t rendererHighRefreshLimitedCount = 0;
 #define RENDERER_COALESCE_WAIT_PRESEVERE_US 1000
 #define RENDERER_COALESCE_WAIT_SEVERE_US 2000
 #define RENDERER_COALESCE_WAIT_VERY_SEVERE_US 3000
+#ifndef RENDERER_DEX_RECOVERY_SWAP_US
+#define RENDERER_DEX_RECOVERY_SWAP_US 12000
+#endif
+#ifndef RENDERER_DEX_RECOVERY_WAIT_US
+#define RENDERER_DEX_RECOVERY_WAIT_US 1000
+#endif
+#ifndef RENDERER_DEX_RECOVERY_FRAMES
+#define RENDERER_DEX_RECOVERY_FRAMES 2
+#endif
 #define RENDERER_HR_PLATEAU_SWAP_US 12000
 #define RENDERER_HR_SEVERE_SWAP_US 15000
 #define RENDERER_HR_VERY_SEVERE_SWAP_US 18000
@@ -847,6 +856,20 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, in
         rendererPreRedrawCoalesceFrames = 0;
         rendererPreRedrawCoalesceWaitUs = 0;
     }
+
+    /* v3.14-dex-burst-begin */
+    // v3.14 DeX/low-refresh swap-burst breaker:
+    // Keep high-refresh/on-screen latency-first behavior unchanged.
+    // On DeX/60Hz, if swap starts blocking around a full 60Hz frame,
+    // add a very short 1ms backoff for 2 frames to break BufferQueue storms.
+    if (!rendererHighRefreshEnabled &&
+        swapUs >= RENDERER_DEX_RECOVERY_SWAP_US &&
+        rendererPreRedrawCoalesceWaitUs <= 0) {
+        rendererPreRedrawCoalesceFrames = RENDERER_DEX_RECOVERY_FRAMES;
+        rendererPreRedrawCoalesceWaitUs = RENDERER_DEX_RECOVERY_WAIT_US;
+    }
+    /* v3.14-dex-burst-end */
+
 rendererUpdateHighRefreshPlateauLimiter(enabled, swapUs, totalUs);
 }
 
