@@ -173,8 +173,13 @@ static uint64_t rendererHighRefreshLimitedCount = 0;
 #define RENDERER_DEX_RECOVERY_WAIT_US 1000
 #endif
 #ifndef RENDERER_DEX_RECOVERY_FRAMES
-#define RENDERER_DEX_RECOVERY_FRAMES 2
+#define RENDERER_DEX_RECOVERY_FRAMES 1
 #endif
+#ifndef RENDERER_DEX_RECOVERY_COOLDOWN_FRAMES
+#define RENDERER_DEX_RECOVERY_COOLDOWN_FRAMES 45
+#endif
+
+static int rendererDexRecoveryCooldownFrames = 0;
 #define RENDERER_HR_PLATEAU_SWAP_US 12000
 #define RENDERER_HR_SEVERE_SWAP_US 15000
 #define RENDERER_HR_VERY_SEVERE_SWAP_US 18000
@@ -857,18 +862,26 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, in
         rendererPreRedrawCoalesceWaitUs = 0;
     }
 
-    /* v3.14-dex-burst-begin */
-    // v3.14 DeX/low-refresh swap-burst breaker:
-    // Keep high-refresh/on-screen latency-first behavior unchanged.
-    // On DeX/60Hz, if swap starts blocking around a full 60Hz frame,
-    // add a very short 1ms backoff for 2 frames to break BufferQueue storms.
-    if (!rendererHighRefreshEnabled &&
-        swapUs >= RENDERER_DEX_RECOVERY_SWAP_US &&
-        rendererPreRedrawCoalesceWaitUs <= 0) {
-        rendererPreRedrawCoalesceFrames = RENDERER_DEX_RECOVERY_FRAMES;
-        rendererPreRedrawCoalesceWaitUs = RENDERER_DEX_RECOVERY_WAIT_US;
+    /* v3.15-dex-burst-begin */
+    // v3.15 DeX/low-refresh swap-burst latch:
+    // v3.14 successfully detected storms, but kept re-arming 1000us waits.
+    // Apply a single short recovery, then cool down so we do not keep adding
+    // latency while eglSwapBuffers/BufferQueue is already blocked.
+    if (rendererHighRefreshEnabled) {
+        rendererDexRecoveryCooldownFrames = 0;
+    } else {
+        if (rendererDexRecoveryCooldownFrames > 0)
+            rendererDexRecoveryCooldownFrames--;
+
+        if (swapUs >= RENDERER_DEX_RECOVERY_SWAP_US &&
+            rendererDexRecoveryCooldownFrames <= 0 &&
+            rendererPreRedrawCoalesceWaitUs <= 0) {
+            rendererPreRedrawCoalesceFrames = RENDERER_DEX_RECOVERY_FRAMES;
+            rendererPreRedrawCoalesceWaitUs = RENDERER_DEX_RECOVERY_WAIT_US;
+            rendererDexRecoveryCooldownFrames = RENDERER_DEX_RECOVERY_COOLDOWN_FRAMES;
+        }
     }
-    /* v3.14-dex-burst-end */
+    /* v3.15-dex-burst-end */
 
 rendererUpdateHighRefreshPlateauLimiter(enabled, swapUs, totalUs);
 }
