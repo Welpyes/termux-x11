@@ -24,4 +24,9 @@
         <item>세로 반전</item>
         <item>가로 반전</item>
     </string-array>
+
+    <string-array name="displayFilteringModeEntries">
+        <item>쌍선형</item>
+        <item>최근접</item>
+    </string-array>
 </resources>

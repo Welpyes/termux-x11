@@ -848,6 +848,9 @@ setViewport(viewport.left, viewport.top, viewport.width(), viewport.height(), p.
     ClipboardManager.OnPrimaryClipChangedListener clipboardListener = this::handleClipboardChange;
 
     public void reloadPreferences(Prefs p) {
+        String filtering = p.displayFilteringMode.get();
+        setFiltering("nearest".equals(filtering) ? GLES20.GL_NEAREST : GLES20.GL_LINEAR);
+
         String filtering =
                 android.preference.PreferenceManager
                     .getDefaultSharedPreferences(getContext())

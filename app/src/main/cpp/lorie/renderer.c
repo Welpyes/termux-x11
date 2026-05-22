@@ -839,6 +839,16 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, in
     else if (rendererSwapPressureScore > RENDERER_PRESSURE_SCORE_MAX)
         rendererSwapPressureScore = RENDERER_PRESSURE_SCORE_MAX;
 
+    // v3.9A latency-first high-refresh:
+    // On 90Hz+ on-screen output, do not add the v3.3 pre-severe 1000us wait.
+    // Keep severe/very-severe coalescing for now; this removes only the light
+    // artificial delay that can hurt input/display latency at 120Hz.
+    if (rendererHighRefreshEnabled &&
+            rendererPreRedrawCoalesceWaitUs == RENDERER_COALESCE_WAIT_PRESEVERE_US) {
+        rendererPreRedrawCoalesceFrames = 0;
+        rendererPreRedrawCoalesceWaitUs = 0;
+    }
+
     rendererUpdateHighRefreshPlateauLimiter(enabled, swapUs, totalUs);
 }
 
