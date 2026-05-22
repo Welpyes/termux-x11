@@ -983,10 +983,10 @@ hardwareKbdScancodesWorkaround = p.hardwareKbdScancodesWorkaround.get();
 
         surface.setFrameRate(
                 refreshRate,
-                android.view.Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
+                android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT,
                 android.view.Surface.CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS);
 
-        android.util.Log.d("LorieView", "Requested surface frame rate " + refreshRate);
+        android.util.Log.d("LorieView", "v3.10B requested surface frame rate DEFAULT " + refreshRate);
     } catch (Throwable ignored) {
     }
 }
@@ -1007,8 +1007,7 @@ private void updateRendererDisplayRefreshRate() {
         refreshRate = 60.0f;
 
     rendererSetDisplayRefreshRate(refreshRate);
-    // v3.10A: disabled for comparison. Do not request Surface frame rate here.
-    android.util.Log.d("LorieView", "v3.10A Surface frame rate request disabled; display refresh " + refreshRate);
+    requestRendererSurfaceFrameRate(refreshRate);
 }
 
 @FastNative private native void rendererSetDisplayRefreshRate(float refreshRate);
