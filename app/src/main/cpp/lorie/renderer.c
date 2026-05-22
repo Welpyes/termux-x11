@@ -180,7 +180,7 @@ static uint64_t rendererHighRefreshLimitedCount = 0;
 #endif
 
 #ifndef RENDERER_ONSCREEN_SPIKE_SWAP_US
-#define RENDERER_ONSCREEN_SPIKE_SWAP_US 10000
+#define RENDERER_ONSCREEN_SPIKE_SWAP_US 6500
 #endif
 #ifndef RENDERER_ONSCREEN_SPIKE_WAIT_US
 #define RENDERER_ONSCREEN_SPIKE_WAIT_US 500
@@ -189,22 +189,18 @@ static uint64_t rendererHighRefreshLimitedCount = 0;
 #define RENDERER_ONSCREEN_SPIKE_FRAMES 1
 #endif
 #ifndef RENDERER_ONSCREEN_SPIKE_COOLDOWN_FRAMES
-#define RENDERER_ONSCREEN_SPIKE_COOLDOWN_FRAMES 60
+#define RENDERER_ONSCREEN_SPIKE_COOLDOWN_FRAMES 24
 #endif
 #ifndef RENDERER_ONSCREEN_BURST_WINDOW_FRAMES
-#define RENDERER_ONSCREEN_BURST_WINDOW_FRAMES 24
+#define RENDERER_ONSCREEN_BURST_WINDOW_FRAMES 36
 #endif
 #ifndef RENDERER_ONSCREEN_BURST_MAX_ARMS
-#define RENDERER_ONSCREEN_BURST_MAX_ARMS 3
-#endif
-#ifndef RENDERER_ONSCREEN_LATE_FRAME_DELTA_US
-#define RENDERER_ONSCREEN_LATE_FRAME_DELTA_US 11000
+#define RENDERER_ONSCREEN_BURST_MAX_ARMS 4
 #endif
 static int rendererDexRecoveryCooldownFrames = 0;
 static int rendererOnscreenSpikeCooldownFrames = 0;
 static int rendererOnscreenSpikeWindowFrames = 0;
 static int rendererOnscreenSpikeArmsInWindow = 0;
-static int64_t rendererOnscreenLastGuardFrameTimeUs = 0;
 #define RENDERER_HR_PLATEAU_SWAP_US 12000
 #define RENDERER_HR_SEVERE_SWAP_US 15000
 #define RENDERER_HR_VERY_SEVERE_SWAP_US 18000
@@ -908,30 +904,17 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, in
     }
     /* v3.15-dex-burst-end */
 
-    /* v3.18-onscreen-proactive-begin */
-    // v3.18 high-refresh proactive burst smoother:
-    // v3.17 reacted after eglSwapBuffers had already stalled. Keep the
-    // existing swap spike detector, and also arm one tiny 0.5ms settle frame
-    // when the guard-to-guard frame interval is already late. This targets
-    // the "late frame -> too-fast catch-up -> swap stall" pattern on 120Hz.
+    /* v3.19-onscreen-swappressure-begin */
+    // v3.19 high-refresh swap-pressure smoother:
+    // v3.18 local-clock proactive guard over-armed 500us waits on normal
+    // frames. Use only real swap pressure now. Start earlier than v3.17
+    // by reacting when swap approaches the 120Hz frame budget, but keep
+    // the intervention bounded to avoid another coalesce loop.
     if (!rendererHighRefreshEnabled) {
         rendererOnscreenSpikeCooldownFrames = 0;
         rendererOnscreenSpikeWindowFrames = 0;
         rendererOnscreenSpikeArmsInWindow = 0;
-        rendererOnscreenLastGuardFrameTimeUs = 0;
     } else {
-        struct timespec rendererGuardTs;
-        clock_gettime(CLOCK_MONOTONIC, &rendererGuardTs);
-
-        int64_t rendererGuardNowUs =
-                (int64_t) rendererGuardTs.tv_sec * 1000000LL +
-                (int64_t) rendererGuardTs.tv_nsec / 1000LL;
-
-        int64_t rendererGuardFrameDeltaUs = 0;
-        if (rendererOnscreenLastGuardFrameTimeUs > 0)
-            rendererGuardFrameDeltaUs = rendererGuardNowUs - rendererOnscreenLastGuardFrameTimeUs;
-        rendererOnscreenLastGuardFrameTimeUs = rendererGuardNowUs;
-
         if (rendererOnscreenSpikeCooldownFrames > 0)
             rendererOnscreenSpikeCooldownFrames--;
 
@@ -941,10 +924,9 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, in
                 rendererOnscreenSpikeArmsInWindow = 0;
         }
 
-        bool onscreenSwapSpike = swapUs >= RENDERER_ONSCREEN_SPIKE_SWAP_US;
-        bool onscreenLateFrame = rendererGuardFrameDeltaUs >= RENDERER_ONSCREEN_LATE_FRAME_DELTA_US;
+        bool onscreenSwapPressure = swapUs >= RENDERER_ONSCREEN_SPIKE_SWAP_US;
 
-        if ((onscreenSwapSpike || onscreenLateFrame) &&
+        if (onscreenSwapPressure &&
             rendererOnscreenSpikeCooldownFrames <= 0 &&
             rendererPreRedrawCoalesceWaitUs <= 0) {
 
@@ -970,7 +952,7 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, in
             }
         }
     }
-    /* v3.18-onscreen-proactive-end */
+    /* v3.19-onscreen-swappressure-end */
 
 rendererUpdateHighRefreshPlateauLimiter(enabled, swapUs, totalUs);
 }
