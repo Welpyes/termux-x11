@@ -197,10 +197,14 @@ static uint64_t rendererHighRefreshLimitedCount = 0;
 #ifndef RENDERER_ONSCREEN_BURST_MAX_ARMS
 #define RENDERER_ONSCREEN_BURST_MAX_ARMS 3
 #endif
+#ifndef RENDERER_ONSCREEN_LATE_FRAME_DELTA_US
+#define RENDERER_ONSCREEN_LATE_FRAME_DELTA_US 11000
+#endif
 static int rendererDexRecoveryCooldownFrames = 0;
 static int rendererOnscreenSpikeCooldownFrames = 0;
 static int rendererOnscreenSpikeWindowFrames = 0;
 static int rendererOnscreenSpikeArmsInWindow = 0;
+static int64_t rendererOnscreenLastGuardFrameTimeUs = 0;
 #define RENDERER_HR_PLATEAU_SWAP_US 12000
 #define RENDERER_HR_SEVERE_SWAP_US 15000
 #define RENDERER_HR_VERY_SEVERE_SWAP_US 18000
@@ -904,16 +908,30 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, in
     }
     /* v3.15-dex-burst-end */
 
-    /* v3.17-onscreen-burst-begin */
-    // v3.17 high-refresh burst-window smoother:
-    // v3.16 handled one-off swap spikes, but the cooldown was too strict
-    // for short repeated 120Hz BufferQueue bursts. Allow up to 3 tiny 0.5ms
-    // settle frames inside a short window, then enter cooldown to avoid loops.
+    /* v3.18-onscreen-proactive-begin */
+    // v3.18 high-refresh proactive burst smoother:
+    // v3.17 reacted after eglSwapBuffers had already stalled. Keep the
+    // existing swap spike detector, and also arm one tiny 0.5ms settle frame
+    // when the guard-to-guard frame interval is already late. This targets
+    // the "late frame -> too-fast catch-up -> swap stall" pattern on 120Hz.
     if (!rendererHighRefreshEnabled) {
         rendererOnscreenSpikeCooldownFrames = 0;
         rendererOnscreenSpikeWindowFrames = 0;
         rendererOnscreenSpikeArmsInWindow = 0;
+        rendererOnscreenLastGuardFrameTimeUs = 0;
     } else {
+        struct timespec rendererGuardTs;
+        clock_gettime(CLOCK_MONOTONIC, &rendererGuardTs);
+
+        int64_t rendererGuardNowUs =
+                (int64_t) rendererGuardTs.tv_sec * 1000000LL +
+                (int64_t) rendererGuardTs.tv_nsec / 1000LL;
+
+        int64_t rendererGuardFrameDeltaUs = 0;
+        if (rendererOnscreenLastGuardFrameTimeUs > 0)
+            rendererGuardFrameDeltaUs = rendererGuardNowUs - rendererOnscreenLastGuardFrameTimeUs;
+        rendererOnscreenLastGuardFrameTimeUs = rendererGuardNowUs;
+
         if (rendererOnscreenSpikeCooldownFrames > 0)
             rendererOnscreenSpikeCooldownFrames--;
 
@@ -923,7 +941,10 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, in
                 rendererOnscreenSpikeArmsInWindow = 0;
         }
 
-        if (swapUs >= RENDERER_ONSCREEN_SPIKE_SWAP_US &&
+        bool onscreenSwapSpike = swapUs >= RENDERER_ONSCREEN_SPIKE_SWAP_US;
+        bool onscreenLateFrame = rendererGuardFrameDeltaUs >= RENDERER_ONSCREEN_LATE_FRAME_DELTA_US;
+
+        if ((onscreenSwapSpike || onscreenLateFrame) &&
             rendererOnscreenSpikeCooldownFrames <= 0 &&
             rendererPreRedrawCoalesceWaitUs <= 0) {
 
@@ -949,7 +970,7 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, in
             }
         }
     }
-    /* v3.17-onscreen-burst-end */
+    /* v3.18-onscreen-proactive-end */
 
 rendererUpdateHighRefreshPlateauLimiter(enabled, swapUs, totalUs);
 }
