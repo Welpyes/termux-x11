@@ -167,7 +167,7 @@ static uint64_t rendererHighRefreshLimitedCount = 0;
 #define RENDERER_COALESCE_WAIT_SEVERE_US 2000
 #define RENDERER_COALESCE_WAIT_VERY_SEVERE_US 3000
 #ifndef RENDERER_DEX_RECOVERY_SWAP_US
-#define RENDERER_DEX_RECOVERY_SWAP_US 12000
+#define RENDERER_DEX_RECOVERY_SWAP_US 9500
 #endif
 #ifndef RENDERER_DEX_RECOVERY_WAIT_US
 #define RENDERER_DEX_RECOVERY_WAIT_US 1000
@@ -176,9 +176,15 @@ static uint64_t rendererHighRefreshLimitedCount = 0;
 #define RENDERER_DEX_RECOVERY_FRAMES 1
 #endif
 #ifndef RENDERER_DEX_RECOVERY_COOLDOWN_FRAMES
-#define RENDERER_DEX_RECOVERY_COOLDOWN_FRAMES 45
+#define RENDERER_DEX_RECOVERY_COOLDOWN_FRAMES 30
 #endif
 
+#ifndef RENDERER_DEX_RECOVERY_WINDOW_FRAMES
+#define RENDERER_DEX_RECOVERY_WINDOW_FRAMES 12
+#endif
+#ifndef RENDERER_DEX_RECOVERY_MAX_ARMS
+#define RENDERER_DEX_RECOVERY_MAX_ARMS 2
+#endif
 #ifndef RENDERER_ONSCREEN_SPIKE_SWAP_US
 #define RENDERER_ONSCREEN_SPIKE_SWAP_US 6500
 #endif
@@ -198,6 +204,8 @@ static uint64_t rendererHighRefreshLimitedCount = 0;
 #define RENDERER_ONSCREEN_BURST_MAX_ARMS 4
 #endif
 static int rendererDexRecoveryCooldownFrames = 0;
+static int rendererDexRecoveryWindowFrames = 0;
+static int rendererDexRecoveryArmsInWindow = 0;
 static int rendererOnscreenSpikeCooldownFrames = 0;
 static int rendererOnscreenSpikeWindowFrames = 0;
 static int rendererOnscreenSpikeArmsInWindow = 0;
@@ -874,6 +882,55 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, in
     else if (rendererSwapPressureScore > RENDERER_PRESSURE_SCORE_MAX)
         rendererSwapPressureScore = RENDERER_PRESSURE_SCORE_MAX;
 
+    /* v3.20-dex-early-burst-begin */
+    // v3.20 low-refresh early burst guard:
+    // Keep high-refresh output latency-first with no 500us smoother.
+    // For DeX/60Hz, react before the old 12ms threshold and allow at most
+    // two 1ms recovery arms inside a short window, then cool down.
+    if (rendererHighRefreshEnabled) {
+        rendererDexRecoveryCooldownFrames = 0;
+        rendererDexRecoveryWindowFrames = 0;
+        rendererDexRecoveryArmsInWindow = 0;
+    } else {
+        if (rendererDexRecoveryCooldownFrames > 0)
+            rendererDexRecoveryCooldownFrames--;
+
+        if (rendererDexRecoveryWindowFrames > 0) {
+            rendererDexRecoveryWindowFrames--;
+            if (rendererDexRecoveryWindowFrames == 0)
+                rendererDexRecoveryArmsInWindow = 0;
+        }
+
+        bool dexSwapPressure = swapUs >= RENDERER_DEX_RECOVERY_SWAP_US;
+
+        if (dexSwapPressure &&
+            rendererDexRecoveryCooldownFrames <= 0 &&
+            rendererPreRedrawCoalesceWaitUs <= 0) {
+
+            if (rendererDexRecoveryWindowFrames <= 0) {
+                rendererDexRecoveryWindowFrames = RENDERER_DEX_RECOVERY_WINDOW_FRAMES;
+                rendererDexRecoveryArmsInWindow = 0;
+            }
+
+            if (rendererDexRecoveryArmsInWindow < RENDERER_DEX_RECOVERY_MAX_ARMS) {
+                rendererPreRedrawCoalesceFrames = RENDERER_DEX_RECOVERY_FRAMES;
+                rendererPreRedrawCoalesceWaitUs = RENDERER_DEX_RECOVERY_WAIT_US;
+                rendererDexRecoveryArmsInWindow++;
+
+                if (rendererDexRecoveryArmsInWindow >= RENDERER_DEX_RECOVERY_MAX_ARMS) {
+                    rendererDexRecoveryCooldownFrames = RENDERER_DEX_RECOVERY_COOLDOWN_FRAMES;
+                    rendererDexRecoveryWindowFrames = 0;
+                    rendererDexRecoveryArmsInWindow = 0;
+                }
+            } else {
+                rendererDexRecoveryCooldownFrames = RENDERER_DEX_RECOVERY_COOLDOWN_FRAMES;
+                rendererDexRecoveryWindowFrames = 0;
+                rendererDexRecoveryArmsInWindow = 0;
+            }
+        }
+    }
+    /* v3.20-dex-early-burst-end */
+
     // v3.11A latency-first high-refresh:
     // On 90Hz+ on-screen output, do not add any pre-redraw coalescing wait.
     // DeX/60Hz keeps the existing v3.3 severe coalescing path because
@@ -882,78 +939,6 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, in
         rendererPreRedrawCoalesceFrames = 0;
         rendererPreRedrawCoalesceWaitUs = 0;
     }
-
-    /* v3.15-dex-burst-begin */
-    // v3.15 DeX/low-refresh swap-burst latch:
-    // v3.14 successfully detected storms, but kept re-arming 1000us waits.
-    // Apply a single short recovery, then cool down so we do not keep adding
-    // latency while eglSwapBuffers/BufferQueue is already blocked.
-    if (rendererHighRefreshEnabled) {
-        rendererDexRecoveryCooldownFrames = 0;
-    } else {
-        if (rendererDexRecoveryCooldownFrames > 0)
-            rendererDexRecoveryCooldownFrames--;
-
-        if (swapUs >= RENDERER_DEX_RECOVERY_SWAP_US &&
-            rendererDexRecoveryCooldownFrames <= 0 &&
-            rendererPreRedrawCoalesceWaitUs <= 0) {
-            rendererPreRedrawCoalesceFrames = RENDERER_DEX_RECOVERY_FRAMES;
-            rendererPreRedrawCoalesceWaitUs = RENDERER_DEX_RECOVERY_WAIT_US;
-            rendererDexRecoveryCooldownFrames = RENDERER_DEX_RECOVERY_COOLDOWN_FRAMES;
-        }
-    }
-    /* v3.15-dex-burst-end */
-
-    /* v3.19-onscreen-swappressure-begin */
-    // v3.19 high-refresh swap-pressure smoother:
-    // v3.18 local-clock proactive guard over-armed 500us waits on normal
-    // frames. Use only real swap pressure now. Start earlier than v3.17
-    // by reacting when swap approaches the 120Hz frame budget, but keep
-    // the intervention bounded to avoid another coalesce loop.
-    if (!rendererHighRefreshEnabled) {
-        rendererOnscreenSpikeCooldownFrames = 0;
-        rendererOnscreenSpikeWindowFrames = 0;
-        rendererOnscreenSpikeArmsInWindow = 0;
-    } else {
-        if (rendererOnscreenSpikeCooldownFrames > 0)
-            rendererOnscreenSpikeCooldownFrames--;
-
-        if (rendererOnscreenSpikeWindowFrames > 0) {
-            rendererOnscreenSpikeWindowFrames--;
-            if (rendererOnscreenSpikeWindowFrames == 0)
-                rendererOnscreenSpikeArmsInWindow = 0;
-        }
-
-        bool onscreenSwapPressure = swapUs >= RENDERER_ONSCREEN_SPIKE_SWAP_US;
-
-        if (onscreenSwapPressure &&
-            rendererOnscreenSpikeCooldownFrames <= 0 &&
-            rendererPreRedrawCoalesceWaitUs <= 0) {
-
-            if (rendererOnscreenSpikeWindowFrames <= 0) {
-                rendererOnscreenSpikeWindowFrames = RENDERER_ONSCREEN_BURST_WINDOW_FRAMES;
-                rendererOnscreenSpikeArmsInWindow = 0;
-            }
-
-            if (rendererOnscreenSpikeArmsInWindow < RENDERER_ONSCREEN_BURST_MAX_ARMS) {
-                rendererPreRedrawCoalesceFrames = RENDERER_ONSCREEN_SPIKE_FRAMES;
-                rendererPreRedrawCoalesceWaitUs = RENDERER_ONSCREEN_SPIKE_WAIT_US;
-                rendererOnscreenSpikeArmsInWindow++;
-
-                if (rendererOnscreenSpikeArmsInWindow >= RENDERER_ONSCREEN_BURST_MAX_ARMS) {
-                    rendererOnscreenSpikeCooldownFrames = RENDERER_ONSCREEN_SPIKE_COOLDOWN_FRAMES;
-                    rendererOnscreenSpikeWindowFrames = 0;
-                    rendererOnscreenSpikeArmsInWindow = 0;
-                }
-            } else {
-                rendererOnscreenSpikeCooldownFrames = RENDERER_ONSCREEN_SPIKE_COOLDOWN_FRAMES;
-                rendererOnscreenSpikeWindowFrames = 0;
-                rendererOnscreenSpikeArmsInWindow = 0;
-            }
-        }
-    }
-    /* v3.19-onscreen-swappressure-end */
-
 rendererUpdateHighRefreshPlateauLimiter(enabled, swapUs, totalUs);
 }
 
