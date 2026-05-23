@@ -1017,7 +1017,18 @@ private void updateRendererDisplayRefreshRate() {
         refreshRate = 60.0f;
 
     rendererSetDisplayRefreshRate(refreshRate);
-    requestRendererSurfaceFrameRate(refreshRate);
+    /* v3.24-onscreen-surface-rate-begin */
+    // v3.24: DeX/60Hz must keep the existing v3.22 path untouched.
+    // Only high-refresh on-screen output skips the explicit Surface frame-rate
+    // request, to test whether Android compositor frame-rate pinning is causing
+    // the 120Hz swap/pacing stalls. No renderer.c / eglSwapBuffers changes.
+    if (refreshRate >= 90.0f) {
+        android.util.Log.d("LorieView",
+                "v3.24 high-refresh onscreen: skip Surface frame rate request " + refreshRate);
+    } else {
+        requestRendererSurfaceFrameRate(refreshRate);
+    }
+    /* v3.24-onscreen-surface-rate-end */
 }
 
 @FastNative private native void rendererSetDisplayRefreshRate(float refreshRate);
