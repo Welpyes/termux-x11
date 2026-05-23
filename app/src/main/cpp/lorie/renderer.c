@@ -166,25 +166,24 @@ static uint64_t rendererHighRefreshLimitedCount = 0;
 #define RENDERER_COALESCE_WAIT_PRESEVERE_US 1000
 #define RENDERER_COALESCE_WAIT_SEVERE_US 2000
 #define RENDERER_COALESCE_WAIT_VERY_SEVERE_US 3000
-#ifndef RENDERER_DEX_RECOVERY_SWAP_US
-#define RENDERER_DEX_RECOVERY_SWAP_US 9500
+#ifndef RENDERER_DEX_STORM_SWAP_US
+#define RENDERER_DEX_STORM_SWAP_US 10500
 #endif
-#ifndef RENDERER_DEX_RECOVERY_WAIT_US
-#define RENDERER_DEX_RECOVERY_WAIT_US 1000
+#ifndef RENDERER_DEX_STORM_STREAK_FRAMES
+#define RENDERER_DEX_STORM_STREAK_FRAMES 2
 #endif
-#ifndef RENDERER_DEX_RECOVERY_FRAMES
-#define RENDERER_DEX_RECOVERY_FRAMES 1
+#ifndef RENDERER_DEX_DRAIN_WAIT_US
+#define RENDERER_DEX_DRAIN_WAIT_US 3000
 #endif
-#ifndef RENDERER_DEX_RECOVERY_COOLDOWN_FRAMES
-#define RENDERER_DEX_RECOVERY_COOLDOWN_FRAMES 30
+#ifndef RENDERER_DEX_DRAIN_FRAMES
+#define RENDERER_DEX_DRAIN_FRAMES 4
+#endif
+#ifndef RENDERER_DEX_DRAIN_COOLDOWN_FRAMES
+#define RENDERER_DEX_DRAIN_COOLDOWN_FRAMES 45
 #endif
 
-#ifndef RENDERER_DEX_RECOVERY_WINDOW_FRAMES
-#define RENDERER_DEX_RECOVERY_WINDOW_FRAMES 12
-#endif
-#ifndef RENDERER_DEX_RECOVERY_MAX_ARMS
-#define RENDERER_DEX_RECOVERY_MAX_ARMS 2
-#endif
+static int rendererDexStormStreakFrames = 0;
+static int rendererDexDrainCooldownFrames = 0;
 #ifndef RENDERER_ONSCREEN_SPIKE_SWAP_US
 #define RENDERER_ONSCREEN_SPIKE_SWAP_US 6500
 #endif
@@ -203,9 +202,6 @@ static uint64_t rendererHighRefreshLimitedCount = 0;
 #ifndef RENDERER_ONSCREEN_BURST_MAX_ARMS
 #define RENDERER_ONSCREEN_BURST_MAX_ARMS 4
 #endif
-static int rendererDexRecoveryCooldownFrames = 0;
-static int rendererDexRecoveryWindowFrames = 0;
-static int rendererDexRecoveryArmsInWindow = 0;
 static int rendererOnscreenSpikeCooldownFrames = 0;
 static int rendererOnscreenSpikeWindowFrames = 0;
 static int rendererOnscreenSpikeArmsInWindow = 0;
@@ -882,55 +878,36 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, in
     else if (rendererSwapPressureScore > RENDERER_PRESSURE_SCORE_MAX)
         rendererSwapPressureScore = RENDERER_PRESSURE_SCORE_MAX;
 
-    /* v3.20-dex-early-burst-begin */
-    // v3.20 low-refresh early burst guard:
-    // Keep high-refresh output latency-first with no 500us smoother.
-    // For DeX/60Hz, react before the old 12ms threshold and allow at most
-    // two 1ms recovery arms inside a short window, then cool down.
+    /* v3.21-dex-storm-drain-begin */
+    // v3.21 low-refresh storm drain:
+    // v3.20's early 1ms recovery detected the DeX storm, but could not break
+    // the repeated 11-16ms eglSwapBuffers stalls. Do not touch high-refresh
+    // output here. On DeX/60Hz only, confirm a real storm first, then apply
+    // one bounded multi-frame drain to shift the BufferQueue phase.
     if (rendererHighRefreshEnabled) {
-        rendererDexRecoveryCooldownFrames = 0;
-        rendererDexRecoveryWindowFrames = 0;
-        rendererDexRecoveryArmsInWindow = 0;
+        rendererDexStormStreakFrames = 0;
+        rendererDexDrainCooldownFrames = 0;
     } else {
-        if (rendererDexRecoveryCooldownFrames > 0)
-            rendererDexRecoveryCooldownFrames--;
+        if (rendererDexDrainCooldownFrames > 0)
+            rendererDexDrainCooldownFrames--;
 
-        if (rendererDexRecoveryWindowFrames > 0) {
-            rendererDexRecoveryWindowFrames--;
-            if (rendererDexRecoveryWindowFrames == 0)
-                rendererDexRecoveryArmsInWindow = 0;
+        if (swapUs >= RENDERER_DEX_STORM_SWAP_US) {
+            if (rendererDexStormStreakFrames < RENDERER_DEX_STORM_STREAK_FRAMES)
+                rendererDexStormStreakFrames++;
+        } else {
+            rendererDexStormStreakFrames = 0;
         }
 
-        bool dexSwapPressure = swapUs >= RENDERER_DEX_RECOVERY_SWAP_US;
-
-        if (dexSwapPressure &&
-            rendererDexRecoveryCooldownFrames <= 0 &&
+        if (rendererDexStormStreakFrames >= RENDERER_DEX_STORM_STREAK_FRAMES &&
+            rendererDexDrainCooldownFrames <= 0 &&
             rendererPreRedrawCoalesceWaitUs <= 0) {
-
-            if (rendererDexRecoveryWindowFrames <= 0) {
-                rendererDexRecoveryWindowFrames = RENDERER_DEX_RECOVERY_WINDOW_FRAMES;
-                rendererDexRecoveryArmsInWindow = 0;
-            }
-
-            if (rendererDexRecoveryArmsInWindow < RENDERER_DEX_RECOVERY_MAX_ARMS) {
-                rendererPreRedrawCoalesceFrames = RENDERER_DEX_RECOVERY_FRAMES;
-                rendererPreRedrawCoalesceWaitUs = RENDERER_DEX_RECOVERY_WAIT_US;
-                rendererDexRecoveryArmsInWindow++;
-
-                if (rendererDexRecoveryArmsInWindow >= RENDERER_DEX_RECOVERY_MAX_ARMS) {
-                    rendererDexRecoveryCooldownFrames = RENDERER_DEX_RECOVERY_COOLDOWN_FRAMES;
-                    rendererDexRecoveryWindowFrames = 0;
-                    rendererDexRecoveryArmsInWindow = 0;
-                }
-            } else {
-                rendererDexRecoveryCooldownFrames = RENDERER_DEX_RECOVERY_COOLDOWN_FRAMES;
-                rendererDexRecoveryWindowFrames = 0;
-                rendererDexRecoveryArmsInWindow = 0;
-            }
+            rendererPreRedrawCoalesceFrames = RENDERER_DEX_DRAIN_FRAMES;
+            rendererPreRedrawCoalesceWaitUs = RENDERER_DEX_DRAIN_WAIT_US;
+            rendererDexDrainCooldownFrames = RENDERER_DEX_DRAIN_COOLDOWN_FRAMES;
+            rendererDexStormStreakFrames = 0;
         }
     }
-    /* v3.20-dex-early-burst-end */
-
+    /* v3.21-dex-storm-drain-end */
     // v3.11A latency-first high-refresh:
     // On 90Hz+ on-screen output, do not add any pre-redraw coalescing wait.
     // DeX/60Hz keeps the existing v3.3 severe coalescing path because
