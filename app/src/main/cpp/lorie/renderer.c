@@ -179,14 +179,45 @@ static uint64_t rendererHighRefreshLimitedCount = 0;
 #define RENDERER_DEX_PRESENT_SKIP_COOLDOWN_FRAMES 8
 #endif
 
+#ifndef RENDERER_ONSCREEN_PRESENT_STORM_SWAP_US
+#define RENDERER_ONSCREEN_PRESENT_STORM_SWAP_US 12000
+#endif
+#ifndef RENDERER_ONSCREEN_PRESENT_PRESSURE_SWAP_US
+#define RENDERER_ONSCREEN_PRESENT_PRESSURE_SWAP_US 8000
+#endif
+#ifndef RENDERER_ONSCREEN_PRESENT_PRESSURE_WINDOW_FRAMES
+#define RENDERER_ONSCREEN_PRESENT_PRESSURE_WINDOW_FRAMES 24
+#endif
+#ifndef RENDERER_ONSCREEN_PRESENT_PRESSURE_MAX_HITS
+#define RENDERER_ONSCREEN_PRESENT_PRESSURE_MAX_HITS 2
+#endif
+#ifndef RENDERER_ONSCREEN_PRESENT_SKIP_FRAMES
+#define RENDERER_ONSCREEN_PRESENT_SKIP_FRAMES 1
+#endif
+#ifndef RENDERER_ONSCREEN_PRESENT_SKIP_COOLDOWN_FRAMES
+#define RENDERER_ONSCREEN_PRESENT_SKIP_COOLDOWN_FRAMES 18
+#endif
 /* v3.22-swap-skip-helper-begin */
 static int rendererDexPresentStormStreakFrames = 0;
 static int rendererDexPresentSkipCooldownFrames = 0;
 static int rendererDexPresentSkipFrames = 0;
 
+static int rendererOnscreenPresentPressureWindowFrames = 0;
+static int rendererOnscreenPresentPressureHits = 0;
+static int rendererOnscreenPresentSkipCooldownFrames = 0;
+static int rendererOnscreenPresentSkipFrames = 0;
+
 static EGLBoolean
 rendererMaybeSkipEglSwapBuffers(EGLDisplay display, EGLSurface surface)
 {
+    if (rendererOnscreenPresentSkipFrames > 0) {
+        rendererOnscreenPresentSkipFrames--;
+        __android_log_print(ANDROID_LOG_DEBUG, "gles-renderer",
+                            "v3.23 Onscreen present skip remaining=%d",
+                            rendererOnscreenPresentSkipFrames);
+        return EGL_TRUE;
+    }
+
     if (rendererDexPresentSkipFrames > 0) {
         rendererDexPresentSkipFrames--;
         __android_log_print(ANDROID_LOG_DEBUG, "gles-renderer",
@@ -948,6 +979,77 @@ rendererUpdateHighRefreshPlateauLimiter(enabled, swapUs, totalUs);
         }
     }
     /* v3.22-dex-present-skip-end */
+
+    /* v3.23-onscreen-present-skip-begin */
+    // v3.23 high-refresh present skip:
+    // DeX/60Hz stays on the v3.22 path. For on-screen 120Hz only, do not
+    // reintroduce 500us wait/coalesce. If swap stalls exceed the 120Hz budget
+    // badly, skip one present to stop feeding BufferQueue for a frame.
+    if (!rendererHighRefreshEnabled) {
+        rendererOnscreenPresentPressureWindowFrames = 0;
+        rendererOnscreenPresentPressureHits = 0;
+        rendererOnscreenPresentSkipCooldownFrames = 0;
+        rendererOnscreenPresentSkipFrames = 0;
+    } else {
+        if (rendererOnscreenPresentSkipCooldownFrames > 0)
+            rendererOnscreenPresentSkipCooldownFrames--;
+
+        if (rendererOnscreenPresentPressureWindowFrames > 0) {
+            rendererOnscreenPresentPressureWindowFrames--;
+            if (rendererOnscreenPresentPressureWindowFrames == 0)
+                rendererOnscreenPresentPressureHits = 0;
+        }
+
+        bool onscreenSevereStorm =
+                swapUs >= RENDERER_ONSCREEN_PRESENT_STORM_SWAP_US;
+        bool onscreenPressure =
+                swapUs >= RENDERER_ONSCREEN_PRESENT_PRESSURE_SWAP_US;
+
+        if (onscreenPressure) {
+            if (rendererOnscreenPresentPressureWindowFrames <= 0) {
+                rendererOnscreenPresentPressureWindowFrames =
+                        RENDERER_ONSCREEN_PRESENT_PRESSURE_WINDOW_FRAMES;
+                rendererOnscreenPresentPressureHits = 0;
+            }
+
+            if (rendererOnscreenPresentPressureHits <
+                RENDERER_ONSCREEN_PRESENT_PRESSURE_MAX_HITS) {
+                rendererOnscreenPresentPressureHits++;
+            }
+        }
+
+        bool onscreenConfirmedStorm =
+                onscreenSevereStorm ||
+                rendererOnscreenPresentPressureHits >=
+                        RENDERER_ONSCREEN_PRESENT_PRESSURE_MAX_HITS;
+
+        if (onscreenConfirmedStorm &&
+            rendererOnscreenPresentSkipCooldownFrames <= 0 &&
+            rendererOnscreenPresentSkipFrames <= 0) {
+
+            rendererOnscreenPresentSkipFrames =
+                    RENDERER_ONSCREEN_PRESENT_SKIP_FRAMES;
+            rendererOnscreenPresentSkipCooldownFrames =
+                    RENDERER_ONSCREEN_PRESENT_SKIP_COOLDOWN_FRAMES;
+            rendererOnscreenPresentPressureWindowFrames = 0;
+            rendererOnscreenPresentPressureHits = 0;
+
+            // Keep high-refresh latency-first: no wait/coalesce.
+            rendererPreRedrawCoalesceFrames = 0;
+            rendererPreRedrawCoalesceWaitUs = 0;
+
+            __android_log_print(ANDROID_LOG_DEBUG, "gles-renderer",
+                                "v3.23 Onscreen present skip armed swap_us=%lld",
+                                (long long) swapUs);
+        }
+
+        if (rendererOnscreenPresentSkipFrames > 0 ||
+            rendererOnscreenPresentSkipCooldownFrames > 0) {
+            rendererPreRedrawCoalesceFrames = 0;
+            rendererPreRedrawCoalesceWaitUs = 0;
+        }
+    }
+    /* v3.23-onscreen-present-skip-end */
 
 }
 
