@@ -166,24 +166,40 @@ static uint64_t rendererHighRefreshLimitedCount = 0;
 #define RENDERER_COALESCE_WAIT_PRESEVERE_US 1000
 #define RENDERER_COALESCE_WAIT_SEVERE_US 2000
 #define RENDERER_COALESCE_WAIT_VERY_SEVERE_US 3000
-#ifndef RENDERER_DEX_STORM_SWAP_US
-#define RENDERER_DEX_STORM_SWAP_US 10500
+#ifndef RENDERER_DEX_PRESENT_STORM_SWAP_US
+#define RENDERER_DEX_PRESENT_STORM_SWAP_US 10500
 #endif
-#ifndef RENDERER_DEX_STORM_STREAK_FRAMES
-#define RENDERER_DEX_STORM_STREAK_FRAMES 2
+#ifndef RENDERER_DEX_PRESENT_STORM_STREAK_FRAMES
+#define RENDERER_DEX_PRESENT_STORM_STREAK_FRAMES 2
 #endif
-#ifndef RENDERER_DEX_DRAIN_WAIT_US
-#define RENDERER_DEX_DRAIN_WAIT_US 3000
+#ifndef RENDERER_DEX_PRESENT_SKIP_FRAMES
+#define RENDERER_DEX_PRESENT_SKIP_FRAMES 1
 #endif
-#ifndef RENDERER_DEX_DRAIN_FRAMES
-#define RENDERER_DEX_DRAIN_FRAMES 4
-#endif
-#ifndef RENDERER_DEX_DRAIN_COOLDOWN_FRAMES
-#define RENDERER_DEX_DRAIN_COOLDOWN_FRAMES 45
+#ifndef RENDERER_DEX_PRESENT_SKIP_COOLDOWN_FRAMES
+#define RENDERER_DEX_PRESENT_SKIP_COOLDOWN_FRAMES 8
 #endif
 
-static int rendererDexStormStreakFrames = 0;
-static int rendererDexDrainCooldownFrames = 0;
+/* v3.22-swap-skip-helper-begin */
+static int rendererDexPresentStormStreakFrames = 0;
+static int rendererDexPresentSkipCooldownFrames = 0;
+static int rendererDexPresentSkipFrames = 0;
+
+static EGLBoolean
+rendererMaybeSkipEglSwapBuffers(EGLDisplay display, EGLSurface surface)
+{
+    if (rendererDexPresentSkipFrames > 0) {
+        rendererDexPresentSkipFrames--;
+        __android_log_print(ANDROID_LOG_DEBUG, "gles-renderer",
+                            "v3.22 DeX present skip remaining=%d",
+                            rendererDexPresentSkipFrames);
+        return EGL_TRUE;
+    }
+
+    return eglSwapBuffers(display, surface);
+}
+
+#define eglSwapBuffers(display, surface) rendererMaybeSkipEglSwapBuffers((display), (surface))
+/* v3.22-swap-skip-helper-end */
 #ifndef RENDERER_ONSCREEN_SPIKE_SWAP_US
 #define RENDERER_ONSCREEN_SPIKE_SWAP_US 6500
 #endif
@@ -877,37 +893,6 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, in
         rendererSwapPressureScore = 0;
     else if (rendererSwapPressureScore > RENDERER_PRESSURE_SCORE_MAX)
         rendererSwapPressureScore = RENDERER_PRESSURE_SCORE_MAX;
-
-    /* v3.21-dex-storm-drain-begin */
-    // v3.21 low-refresh storm drain:
-    // v3.20's early 1ms recovery detected the DeX storm, but could not break
-    // the repeated 11-16ms eglSwapBuffers stalls. Do not touch high-refresh
-    // output here. On DeX/60Hz only, confirm a real storm first, then apply
-    // one bounded multi-frame drain to shift the BufferQueue phase.
-    if (rendererHighRefreshEnabled) {
-        rendererDexStormStreakFrames = 0;
-        rendererDexDrainCooldownFrames = 0;
-    } else {
-        if (rendererDexDrainCooldownFrames > 0)
-            rendererDexDrainCooldownFrames--;
-
-        if (swapUs >= RENDERER_DEX_STORM_SWAP_US) {
-            if (rendererDexStormStreakFrames < RENDERER_DEX_STORM_STREAK_FRAMES)
-                rendererDexStormStreakFrames++;
-        } else {
-            rendererDexStormStreakFrames = 0;
-        }
-
-        if (rendererDexStormStreakFrames >= RENDERER_DEX_STORM_STREAK_FRAMES &&
-            rendererDexDrainCooldownFrames <= 0 &&
-            rendererPreRedrawCoalesceWaitUs <= 0) {
-            rendererPreRedrawCoalesceFrames = RENDERER_DEX_DRAIN_FRAMES;
-            rendererPreRedrawCoalesceWaitUs = RENDERER_DEX_DRAIN_WAIT_US;
-            rendererDexDrainCooldownFrames = RENDERER_DEX_DRAIN_COOLDOWN_FRAMES;
-            rendererDexStormStreakFrames = 0;
-        }
-    }
-    /* v3.21-dex-storm-drain-end */
     // v3.11A latency-first high-refresh:
     // On 90Hz+ on-screen output, do not add any pre-redraw coalescing wait.
     // DeX/60Hz keeps the existing v3.3 severe coalescing path because
@@ -917,6 +902,53 @@ static void rendererUpdateSwapBackpressureGuard(bool enabled, int64_t swapUs, in
         rendererPreRedrawCoalesceWaitUs = 0;
     }
 rendererUpdateHighRefreshPlateauLimiter(enabled, swapUs, totalUs);
+    /* v3.22-dex-present-skip-begin */
+    // v3.22 low-refresh present skip:
+    // v3.21 confirmed the storm and applied 3ms waits, but eglSwapBuffers
+    // still stayed stuck around 12-18ms. For DeX/60Hz only, confirm the
+    // storm, then skip exactly one present to stop feeding BufferQueue.
+    // High-refresh/on-screen output remains no-smoother/no-wait here.
+    if (rendererHighRefreshEnabled) {
+        rendererDexPresentStormStreakFrames = 0;
+        rendererDexPresentSkipCooldownFrames = 0;
+        rendererDexPresentSkipFrames = 0;
+    } else {
+        if (rendererDexPresentSkipCooldownFrames > 0)
+            rendererDexPresentSkipCooldownFrames--;
+
+        if (swapUs >= RENDERER_DEX_PRESENT_STORM_SWAP_US) {
+            if (rendererDexPresentStormStreakFrames < RENDERER_DEX_PRESENT_STORM_STREAK_FRAMES)
+                rendererDexPresentStormStreakFrames++;
+        } else {
+            rendererDexPresentStormStreakFrames = 0;
+        }
+
+        if (rendererDexPresentStormStreakFrames >= RENDERER_DEX_PRESENT_STORM_STREAK_FRAMES &&
+            rendererDexPresentSkipCooldownFrames <= 0 &&
+            rendererDexPresentSkipFrames <= 0) {
+            rendererDexPresentSkipFrames = RENDERER_DEX_PRESENT_SKIP_FRAMES;
+            rendererDexPresentSkipCooldownFrames = RENDERER_DEX_PRESENT_SKIP_COOLDOWN_FRAMES;
+            rendererDexPresentStormStreakFrames = 0;
+
+            // Do not combine v3.22 present skip with old wait-based recovery.
+            rendererPreRedrawCoalesceFrames = 0;
+            rendererPreRedrawCoalesceWaitUs = 0;
+
+            __android_log_print(ANDROID_LOG_DEBUG, "gles-renderer",
+                                "v3.22 DeX present skip armed swap_us=%lld",
+                                (long long) swapUs);
+        }
+
+        if (rendererDexPresentSkipFrames > 0 ||
+            rendererDexPresentSkipCooldownFrames > 0) {
+            // Suppress legacy wait/coalesce during the present-skip recovery
+            // window. v3.21 showed waits do not drain this storm.
+            rendererPreRedrawCoalesceFrames = 0;
+            rendererPreRedrawCoalesceWaitUs = 0;
+        }
+    }
+    /* v3.22-dex-present-skip-end */
+
 }
 
 
