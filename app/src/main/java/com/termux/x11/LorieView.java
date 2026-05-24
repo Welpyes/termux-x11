@@ -998,6 +998,33 @@ private void requestRendererSurfaceFrameRate(float refreshRate) {
     } catch (Throwable ignored) {
     }
 }
+    /* v3.26-fixed-source-helper-begin */
+    private void requestRendererSurfaceFrameRateFixedSource(float refreshRate) {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R)
+            return;
+
+        android.view.Surface surface = getHolder().getSurface();
+        if (surface == null || !surface.isValid())
+            return;
+
+        try {
+            surface.setFrameRate(
+                    refreshRate,
+                    android.view.Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
+                    android.view.Surface.CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS);
+            android.util.Log.d("LorieView",
+                    "v3.26 onscreen/default-display high-refresh: requested FIXED_SOURCE Surface frame rate "
+                            + refreshRate);
+        } catch (Throwable t) {
+            android.util.Log.w("LorieView",
+                    "v3.26 FIXED_SOURCE Surface frame rate request failed; falling back to default "
+                            + refreshRate,
+                    t);
+            requestRendererSurfaceFrameRate(refreshRate);
+        }
+    }
+    /* v3.26-fixed-source-helper-end */
+
 
 
 
@@ -1017,18 +1044,21 @@ private void updateRendererDisplayRefreshRate() {
         refreshRate = 60.0f;
 
     rendererSetDisplayRefreshRate(refreshRate);
-    /* v3.24-onscreen-surface-rate-begin */
-    // v3.24: DeX/60Hz must keep the existing v3.22 path untouched.
-    // Only high-refresh on-screen output skips the explicit Surface frame-rate
-    // request, to test whether Android compositor frame-rate pinning is causing
-    // the 120Hz swap/pacing stalls. No renderer.c / eglSwapBuffers changes.
-    if (refreshRate >= 90.0f) {
-        android.util.Log.d("LorieView",
-                "v3.24 high-refresh onscreen: skip Surface frame rate request " + refreshRate);
-    } else {
-        requestRendererSurfaceFrameRate(refreshRate);
-    }
-    /* v3.24-onscreen-surface-rate-end */
+        /* v3.26-onscreen-surface-rate-fixed-source-begin */
+        // v3.26: keep DeX/external-display path untouched.
+        // Only default-display high-refresh on-screen output requests FIXED_SOURCE
+        // Surface frame rate, to force Android compositor pacing to 120Hz.
+        android.view.Display v326Display = getDisplay();
+        boolean v326DefaultDisplay =
+                v326Display != null &&
+                v326Display.getDisplayId() == android.view.Display.DEFAULT_DISPLAY;
+
+        if (refreshRate >= 90.0f && v326DefaultDisplay) {
+            requestRendererSurfaceFrameRateFixedSource(refreshRate);
+        } else {
+            requestRendererSurfaceFrameRate(refreshRate);
+        }
+        /* v3.26-onscreen-surface-rate-fixed-source-end */
 }
 
 @FastNative private native void rendererSetDisplayRefreshRate(float refreshRate);
