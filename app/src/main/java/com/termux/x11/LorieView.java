@@ -1017,25 +1017,18 @@ private void updateRendererDisplayRefreshRate() {
         refreshRate = 60.0f;
 
     rendererSetDisplayRefreshRate(refreshRate);
-        /* v3.25-onscreen-surface-rate-clear-begin */
-        // v3.25: keep DeX/external-display path untouched.
-        // Only default-display high-refresh on-screen output clears the Surface
-        // frame-rate request to test whether compositor frame-rate pinning causes
-        // the 120Hz swap/pacing stalls.
-        android.view.Display v325Display = getDisplay();
-        boolean v325DefaultDisplay =
-                v325Display != null &&
-                v325Display.getDisplayId() == android.view.Display.DEFAULT_DISPLAY;
-
-        if (refreshRate >= 90.0f && v325DefaultDisplay) {
-            android.util.Log.d("LorieView",
-                    "v3.25 onscreen/default-display high-refresh: clear Surface frame rate request "
-                            + refreshRate);
-            requestRendererSurfaceFrameRate(0.0f);
-        } else {
-            requestRendererSurfaceFrameRate(refreshRate);
-        }
-        /* v3.25-onscreen-surface-rate-clear-end */
+    /* v3.24-onscreen-surface-rate-begin */
+    // v3.24: DeX/60Hz must keep the existing v3.22 path untouched.
+    // Only high-refresh on-screen output skips the explicit Surface frame-rate
+    // request, to test whether Android compositor frame-rate pinning is causing
+    // the 120Hz swap/pacing stalls. No renderer.c / eglSwapBuffers changes.
+    if (refreshRate >= 90.0f) {
+        android.util.Log.d("LorieView",
+                "v3.24 high-refresh onscreen: skip Surface frame rate request " + refreshRate);
+    } else {
+        requestRendererSurfaceFrameRate(refreshRate);
+    }
+    /* v3.24-onscreen-surface-rate-end */
 }
 
 @FastNative private native void rendererSetDisplayRefreshRate(float refreshRate);
