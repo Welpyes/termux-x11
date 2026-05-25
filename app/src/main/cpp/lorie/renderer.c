@@ -26,7 +26,6 @@
 #include "lorie.h"
 
 #include <unistd.h>
-#include <stdint.h>
 #define log(...) __android_log_print(ANDROID_LOG_DEBUG, "gles-renderer", __VA_ARGS__)
 #define loge(...) __android_log_print(ANDROID_LOG_ERROR, "gles-renderer", __VA_ARGS__)
 
@@ -149,72 +148,6 @@ static uint64_t rendererPreRedrawCoalescedCount = 0;
 static int64_t rendererBackpressureLastSwapUs = 0;
 static float rendererDisplayRefreshRateHz = 60.0f;
 static bool rendererHighRefreshEnabled = false;
-
-#ifndef RENDERER_ONSCREEN_PHASE_MIN_INTERVAL_US
-#define RENDERER_ONSCREEN_PHASE_MIN_INTERVAL_US 7600
-#endif
-#ifndef RENDERER_ONSCREEN_PHASE_MAX_SLEEP_US
-#define RENDERER_ONSCREEN_PHASE_MAX_SLEEP_US 5500
-#endif
-#ifndef RENDERER_ONSCREEN_PHASE_LOG_MIN_SLEEP_US
-#define RENDERER_ONSCREEN_PHASE_LOG_MIN_SLEEP_US 1000
-#endif
-
-/* v3.27-onscreen-swap-phase-helper-begin */
-static int64_t rendererOnscreenPhaseLastSwapStartUs = 0;
-
-static int64_t
-rendererOnscreenPhaseNowUs(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int64_t) ts.tv_sec * 1000000LL + (int64_t) ts.tv_nsec / 1000LL;
-}
-
-static void
-rendererMaybeAlignOnscreenSwapPhase(void)
-{
-    // DeX/external/60Hz path must be a no-op.
-    if (!rendererHighRefreshEnabled) {
-        rendererOnscreenPhaseLastSwapStartUs = 0;
-        return;
-    }
-
-    int64_t nowUs = rendererOnscreenPhaseNowUs();
-
-    if (rendererOnscreenPhaseLastSwapStartUs > 0) {
-        int64_t deltaUs = nowUs - rendererOnscreenPhaseLastSwapStartUs;
-
-        if (deltaUs > 0 && deltaUs < RENDERER_ONSCREEN_PHASE_MIN_INTERVAL_US) {
-            int64_t sleepUs = RENDERER_ONSCREEN_PHASE_MIN_INTERVAL_US - deltaUs;
-
-            if (sleepUs > RENDERER_ONSCREEN_PHASE_MAX_SLEEP_US)
-                sleepUs = RENDERER_ONSCREEN_PHASE_MAX_SLEEP_US;
-
-            if (sleepUs > 0) {
-                struct timespec req = {
-                        .tv_sec = sleepUs / 1000000LL,
-                        .tv_nsec = (sleepUs % 1000000LL) * 1000LL,
-                };
-
-                nanosleep(&req, NULL);
-
-                if (sleepUs >= RENDERER_ONSCREEN_PHASE_LOG_MIN_SLEEP_US) {
-                    __android_log_print(ANDROID_LOG_DEBUG, "gles-renderer",
-                                        "v3.27 Onscreen swap phase align sleep_us=%lld delta_us=%lld",
-                                        (long long) sleepUs,
-                                        (long long) deltaUs);
-                }
-
-                nowUs = rendererOnscreenPhaseNowUs();
-            }
-        }
-    }
-
-    rendererOnscreenPhaseLastSwapStartUs = nowUs;
-}
-/* v3.27-onscreen-swap-phase-helper-end */
-
 static int64_t rendererRefreshBudgetUs = 16667;
 static int rendererHighRefreshPlateauScore = 0;
 static int rendererHighRefreshGoodFrames = 0;
@@ -730,9 +663,6 @@ void rendererSetWindow(JNIEnv *env, __unused jobject thiz, jobject jsfc) {
 static inline __always_inline void releaseWinAndSurface(ANativeWindow** anw, EGLSurface *esfc) {
     if (esfc && *esfc && *esfc != defaultSfc) {
         // Requeue the dequeued buffer, causes flickering during window reconfiguring
-        /* v3.27-onscreen-swap-phase-call-begin */
-        rendererMaybeAlignOnscreenSwapPhase();
-        /* v3.27-onscreen-swap-phase-call-end */
         eglSwapBuffers(egl_display, *esfc);
         if (eglMakeCurrent(egl_display, defaultSfc, defaultSfc, ctx) != EGL_TRUE)
             return vprintEglError("eglMakeCurrent failed (EGL_NO_SURFACE)", __LINE__);
@@ -1156,17 +1086,11 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
     if (rendererPerfLogEnabled) {
         int64_t swapStartNs = rendererNowNs();
 
-        /* v3.27-onscreen-swap-phase-call-begin */
-        rendererMaybeAlignOnscreenSwapPhase();
-        /* v3.27-onscreen-swap-phase-call-end */
         if (eglSwapBuffers(egl_display, sfc) != EGL_TRUE)
             printEglError("Failed to swap buffers", __LINE__);
 
         swapUs = rendererNsToUs(rendererNowNs() - swapStartNs);
     } else {
-        /* v3.27-onscreen-swap-phase-call-begin */
-        rendererMaybeAlignOnscreenSwapPhase();
-        /* v3.27-onscreen-swap-phase-call-end */
         if (eglSwapBuffers(egl_display, sfc) != EGL_TRUE)
             printEglError("Failed to swap buffers", __LINE__);
     }
@@ -1175,9 +1099,6 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
     rendererUpdateSwapBackpressureGuard(swapBackpressureGuardEnabled, swapUs, guardTotalUs);
 
     // Perform a little drawing operation to make sure the next buffer is ready on the next invocation of drawing.
-    /* v3.27-onscreen-swap-phase-call-begin */
-    rendererMaybeAlignOnscreenSwapPhase();
-    /* v3.27-onscreen-swap-phase-call-end */
     // In gaming fast mode this is disabled, so eglSwapBuffers() is the only submit point.
     if (postSwapTouchEnabled) {
         int64_t postSwapTouchStartNs = rendererNowNs();
@@ -1353,9 +1274,6 @@ __noreturn static void* rendererThread(void) {
             else if (win != defaultWin) {
                 glClearColor(0, 0, 0, 0);
                 glClear(GL_COLOR_BUFFER_BIT);
-                /* v3.27-onscreen-swap-phase-call-begin */
-                rendererMaybeAlignOnscreenSwapPhase();
-                /* v3.27-onscreen-swap-phase-call-end */
                 eglSwapBuffers(egl_display, sfc);
             }
 
