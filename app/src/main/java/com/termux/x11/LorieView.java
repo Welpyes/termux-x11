@@ -1048,6 +1048,28 @@ private void updateRendererDisplayRefreshRate() {
         // v3.26: keep DeX/external-display path untouched.
         // Only default-display high-refresh on-screen output requests FIXED_SOURCE
         // Surface frame rate, to force Android compositor pacing to 120Hz.
+        /* v3.28-display-diagnostic-begin */
+        // v3.28: diagnostic only. No timing, wait, sleep, skip, or renderer path changes.
+        try {
+            android.view.Display v328Display = getDisplay();
+            int v328DisplayId = v328Display != null ? v328Display.getDisplayId() : -1;
+            boolean v328DefaultDisplay =
+                    v328Display != null &&
+                    v328Display.getDisplayId() == android.view.Display.DEFAULT_DISPLAY;
+            float v328DisplayRefresh =
+                    v328Display != null ? v328Display.getRefreshRate() : -1.0f;
+
+            android.util.Log.d("LorieView",
+                    "v3.28 display diagnostic: refreshRateArg=" + refreshRate
+                            + " displayRefresh=" + v328DisplayRefresh
+                            + " displayId=" + v328DisplayId
+                            + " defaultDisplay=" + v328DefaultDisplay
+                            + " highRefresh=" + (refreshRate >= 90.0f));
+        } catch (Throwable t) {
+            android.util.Log.w("LorieView",
+                    "v3.28 display diagnostic failed", t);
+        }
+        /* v3.28-display-diagnostic-end */
         android.view.Display v326Display = getDisplay();
         boolean v326DefaultDisplay =
                 v326Display != null &&
