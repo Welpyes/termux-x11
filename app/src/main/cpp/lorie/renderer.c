@@ -148,6 +148,53 @@ static uint64_t rendererPreRedrawCoalescedCount = 0;
 static int64_t rendererBackpressureLastSwapUs = 0;
 static float rendererDisplayRefreshRateHz = 60.0f;
 static bool rendererHighRefreshEnabled = false;
+
+#ifndef RENDERER_V330_ONSCREEN_SWAP_INTERVAL
+#define RENDERER_V330_ONSCREEN_SWAP_INTERVAL 1
+#endif
+#ifndef RENDERER_V330_LOW_REFRESH_SWAP_INTERVAL
+#define RENDERER_V330_LOW_REFRESH_SWAP_INTERVAL 0
+#endif
+
+/* v3.30-swap-interval-helper-begin */
+static int rendererV330LastSwapInterval = -999;
+static int rendererV330LogBudget = 8;
+
+static void
+rendererV330MaybeSetSwapInterval(EGLDisplay display)
+{
+    // v3.30: do not sleep, skip, wait, or coalesce.
+    // High-refresh on-screen uses EGL native pacing.
+    // Low-refresh / DeX keeps the existing immediate path.
+    int target = rendererHighRefreshEnabled ?
+            RENDERER_V330_ONSCREEN_SWAP_INTERVAL :
+            RENDERER_V330_LOW_REFRESH_SWAP_INTERVAL;
+
+    if (rendererV330LastSwapInterval == target)
+        return;
+
+    EGLBoolean ok = eglSwapInterval(display, target);
+
+    if (ok) {
+        rendererV330LastSwapInterval = target;
+
+        if (rendererV330LogBudget > 0) {
+            __android_log_print(ANDROID_LOG_DEBUG, "gles-renderer",
+                                "v3.30 eglSwapInterval target=%d hr_enabled=%d",
+                                target, rendererHighRefreshEnabled ? 1 : 0);
+            rendererV330LogBudget--;
+        }
+    } else {
+        if (rendererV330LogBudget > 0) {
+            __android_log_print(ANDROID_LOG_WARN, "gles-renderer",
+                                "v3.30 eglSwapInterval failed target=%d hr_enabled=%d",
+                                target, rendererHighRefreshEnabled ? 1 : 0);
+            rendererV330LogBudget--;
+        }
+    }
+}
+/* v3.30-swap-interval-helper-end */
+
 static int64_t rendererRefreshBudgetUs = 16667;
 static int rendererHighRefreshPlateauScore = 0;
 static int rendererHighRefreshGoodFrames = 0;
@@ -195,6 +242,9 @@ rendererMaybeSkipEglSwapBuffers(EGLDisplay display, EGLSurface surface)
         return EGL_TRUE;
     }
 
+    /* v3.30-swap-interval-call-begin */
+    rendererV330MaybeSetSwapInterval(display);
+    /* v3.30-swap-interval-call-end */
     return eglSwapBuffers(display, surface);
 }
 
