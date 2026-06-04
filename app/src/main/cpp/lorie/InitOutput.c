@@ -673,35 +673,10 @@ static Bool lorieScreenInit(ScreenPtr pScreen, unused int argc, unused char **ar
 
 
 static void lorieSetXftDpiResource(int dpi) {
-    if (dpi <= 0)
-        dpi = 96;
-
-    if (pScreenPtr == NULL || pScreenPtr->root == NULL)
-        return;
-
-    char resources[128];
-    int len = snprintf(resources, sizeof(resources), "Xft.dpi:\t%d\n", dpi);
-
-    if (len <= 0)
-        return;
-
-    if (len >= (int)sizeof(resources))
-        len = (int)sizeof(resources) - 1;
-
-    Atom resourceManager = MakeAtom("RESOURCE_MANAGER", strlen("RESOURCE_MANAGER"), TRUE);
-    Atom stringAtom = MakeAtom("STRING", strlen("STRING"), TRUE);
-
-    dixChangeWindowProperty(
-        serverClient,
-        pScreenPtr->root,
-        resourceManager,
-        stringAtom,
-        8,
-        PropModeReplace,
-        len,
-        resources,
-        TRUE
-    );
+    /*
+     * Disabled to prevent overwriting user xrdb configuration.
+     * Overwriting RESOURCE_MANAGER property nukes all other user resources.
+     */
 }
 
 void lorieSetMonitorResolution(int dpi) {
